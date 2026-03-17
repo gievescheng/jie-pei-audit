@@ -1,64 +1,97 @@
 @echo off
 chcp 65001 >nul
-title 潔沛企業 ISO 9001:2015 稽核系統
+setlocal EnableExtensions EnableDelayedExpansion
+
+title ISO 9001 Audit Dashboard
+cd /d "%~dp0"
 
 echo ================================================
-echo  潔沛企業 ISO 9001:2015 稽核系統 啟動中...
+echo ISO 9001 Audit Dashboard
 echo ================================================
 echo.
 
-:: 停止所有可能佔用 8888 port 的 Python 程序
-echo [1/3] 清除舊程序...
-for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8888 "') do (
+echo [1/5] Clearing ports 8888 and 8890...
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8888 " ^| findstr "LISTENING"') do (
+    taskkill /F /PID %%a >nul 2>&1
+)
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8890 " ^| findstr "LISTENING"') do (
     taskkill /F /PID %%a >nul 2>&1
 )
 timeout /t 1 /nobreak >nul
 
-:: 再次確認 port 8888 已釋放
-netstat -ano 2>nul | findstr ":8888" | findstr "LISTENING" >nul
-if %errorlevel%==0 (
-    echo [警告] port 8888 仍被占用，嘗試強制清除...
-    taskkill /F /IM python.exe >nul 2>&1
-    taskkill /F /IM python3.exe >nul 2>&1
-    taskkill /F /IM python3.13.exe >nul 2>&1
-    timeout /t 2 /nobreak >nul
+set "PYTHON_EXE="
+set "PYTHON_ARGS="
+set "STORE_PY="
+
+py -3.13 -c "import sys" >nul 2>&1
+if not errorlevel 1 (
+    set "PYTHON_EXE=py"
+    set "PYTHON_ARGS=-3.13"
 )
 
-:: 啟動 Flask 伺服器
-echo [2/3] 啟動 Flask 伺服器 (port 8888)...
-cd /d "%~dp0"
-start "潔沛稽核系統-Server" /B python server.py
+if not defined PYTHON_EXE (
+    python -c "import sys" >nul 2>&1
+    if not errorlevel 1 (
+        set "PYTHON_EXE=python"
+    )
+)
 
-:: 等待伺服器啟動（最多等 8 秒）
-echo [3/3] 等待伺服器就緒...
+if not defined PYTHON_EXE (
+    for /f "tokens=2,*" %%a in ('reg query "HKCU\Software\Python\PythonCore\3.13\InstallPath" /v ExecutablePath 2^>nul ^| find /I "ExecutablePath"') do set "STORE_PY=%%b"
+    if defined STORE_PY if exist "!STORE_PY!" (
+        set "PYTHON_EXE=!STORE_PY!"
+    )
+)
+
+if not defined PYTHON_EXE (
+    echo [ERROR] Python 3.13 was not found.
+    echo Tried: py -3.13, python, and the Store Python registry path.
+    pause
+    exit /b 1
+)
+
+echo [2/5] Using !PYTHON_EXE! !PYTHON_ARGS!
+echo [3/5] Starting Flask server...
+if defined PYTHON_ARGS (
+    start "audit-server" /B "!PYTHON_EXE!" !PYTHON_ARGS! server.py
+) else (
+    start "audit-server" /B "!PYTHON_EXE!" server.py
+)
+
+echo [4/5] Starting V2 FastAPI server...
+if defined PYTHON_ARGS (
+    start "audit-v2" /B "!PYTHON_EXE!" !PYTHON_ARGS! run_v2.py
+) else (
+    start "audit-v2" /B "!PYTHON_EXE!" run_v2.py
+)
+
+echo [5/5] Waiting for http://127.0.0.1:8888/ and http://127.0.0.1:8890/api/v2/health ...
 set /a count=0
 :wait_loop
 timeout /t 1 /nobreak >nul
 set /a count+=1
-curl -s -o nul -w "%%{http_code}" http://localhost:8888/ 2>nul | findstr "200" >nul
-if %errorlevel%==0 goto server_ready
-if %count% geq 8 goto timeout_error
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8888/ -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8890/api/v2/health -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
+if !errorlevel! EQU 0 (
+    powershell -NoProfile -Command "try { $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8888/ -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
+    if !errorlevel! EQU 0 goto server_ready
+)
+if !count! GEQ 20 goto timeout_error
 goto wait_loop
 
 :server_ready
 echo.
 echo ================================================
-echo  [成功] 系統已啟動！
-echo  網址：http://localhost:8888
+echo Services ready:
+echo - Flask UI: http://127.0.0.1:8888/
+echo - V2 API  : http://127.0.0.1:8890/api/v2/health
 echo ================================================
-echo.
-start http://localhost:8888
-goto end
+start "" http://127.0.0.1:8888/
+exit /b 0
 
 :timeout_error
 echo.
-echo [錯誤] 伺服器啟動逾時，請確認：
-echo   1. Python 已安裝
-echo   2. 已執行：pip install flask openpyxl requests
-echo   3. 查看錯誤訊息
+echo [ERROR] Services did not become ready in time.
+echo Check Python dependencies: flask openpyxl requests fastapi uvicorn sqlalchemy httpx python-multipart
 pause
-
-:end
-echo 伺服器持續運行中。關閉此視窗將停止系統。
-echo.
-python server.py
+exit /b 1

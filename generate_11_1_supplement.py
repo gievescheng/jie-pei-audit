@@ -40,12 +40,10 @@ def sheet_to_date(sheet_name):
     """
     '生產日報2026.01.05' → '2026/01/05'
     支援民國年: '生產日報115.01.05' → '2026/01/05'
-    多批次工作表（如 '2026.02.201' = 2月2日第1批）→ None（由資料列補充日期）
-    使用 (?!\\d) 確保日期部份恰好是 2 位數。
     """
-    m = re.search(r'(\d{3,4})\.(\d{2})\.(\d{2})(?!\d)', sheet_name)
+    m = re.search(r'(\d{3,4})\.(\d{2})\.(\d{2})$', sheet_name)
     if not m:
-        return None
+        return sheet_name
     y = int(m.group(1))
     if y < 1911:          # 民國年
         y += 1911
@@ -54,25 +52,17 @@ def sheet_to_date(sheet_name):
 
 def roc_cell_to_date(v):
     """
-    日期字串轉 'YYYY/MM/DD'，支援：
-    - 民國年：'115.01.05' → '2026/01/05'
-    - 西元點分：'2026.01.21' → '2026/01/21'
-    - datetime 物件
+    民國日期字串 '115.01.05' → '2026/01/05'
+    如果 v 已是 datetime 物件就直接格式化
     """
     if v is None:
         return None
     if hasattr(v, 'strftime'):
         return v.strftime('%Y/%m/%d')
-    s = str(v).strip()
-    # 民國年 (2-3 digit year)
-    m = re.match(r'^(\d{2,3})\.(\d{2})\.(\d{2})$', s)
+    m = re.match(r'^(\d{2,3})\.(\d{2})\.(\d{2})$', str(v).strip())
     if m:
         y = int(m.group(1)) + 1911
         return f"{y}/{m.group(2)}/{m.group(3)}"
-    # 西元年點分 (4-digit year)
-    m = re.match(r'^(\d{4})\.(\d{2})\.(\d{2})$', s)
-    if m:
-        return f"{m.group(1)}/{m.group(2)}/{m.group(3)}"
     return None
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -140,15 +130,11 @@ for sname in wb115.sheetnames:
         if len(row) < 4:
             continue
 
-        # col0: 日期（支援民國年 115.xx.xx、西元點分 2026.xx.xx、datetime）
+        # col0: 日期（可能是民國年字串或 datetime，也可能為 None）
         if row[0] is not None:
             converted = roc_cell_to_date(row[0])
             if converted:
                 current_date = converted
-
-        # 日期未知時跳過（多批次工作表開頭前幾列可能如此）
-        if current_date is None:
-            continue
 
         # col1: 設施站點（合併儲存格時為 None，向下延用前一值）
         raw_station = row[1] if len(row) > 1 else None

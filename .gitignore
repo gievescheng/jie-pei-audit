@@ -1,22 +1,3 @@
-# Python
+﻿.v2_runtime.json
+v2_backend/data/
 __pycache__/
-*.py[cod]
-*.pyo
-
-# 三階文件（475MB，超出 GitHub 建議大小，改用 NAS 存取）
-三階文件/
-
-# Microsoft Office 暫存鎖定檔
-~$*
-*.tmp
-
-# 暫存 / 偵錯輸出
-_*.txt
-_*.json
-_*.xlsx
-nul
-convert_log.txt
-
-# 編輯器
-.vscode/
-*.swp
