@@ -261,6 +261,71 @@ class FlaskOperationsTest(unittest.TestCase):
             },
         )
         self.assertEqual(material_response.status_code, 200)
+
+    def test_production_record_upload_import(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["日期", "站點", "客戶/產品", "Wafer Boat Lot", "投入", "備註", "良品", "不良", "良率", "不良原因", "作業員", "補充"])
+        ws.append(["2026/03/20", "OCR", "C001/待洗玻璃", "0320-1", 30, "", 28, 2, "93.3%", "刮傷, 髒污", "王小明", "夜班"])
+        sample_path = Path(self.temp_dir.name) / "production_upload.xlsx"
+        wb.save(sample_path)
+
+        response = self.client.post(
+            "/api/production-records/import",
+            data={"file": (io.BytesIO(sample_path.read_bytes()), "production_upload.xlsx")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["source_file"], "production_upload.xlsx")
+        self.assertEqual(len(payload["records"]), 1)
+        self.assertEqual(payload["records"][0]["lot"], "0320-1")
+        self.assertEqual(payload["records"][0]["customer"], "C001")
+        self.assertEqual(payload["records"][0]["product"], "待洗玻璃")
+
+    def test_quality_record_upload_import(self):
+        wb = Workbook()
+        ws = wb.active
+        for _ in range(4):
+            ws.append([])
+        ws.append(["材料名稱", "批號", "數量", "規格", "檢驗數量", "PH", "比重", "RI", "旋光值", "結果", "備註"])
+        ws.append(["IPA", "B20260320", "200kg", "電子級", "3", "7.0", "0.98", "1.33", "0.1", "OK", "正常"])
+        sample_path = Path(self.temp_dir.name) / "quality_upload.xlsx"
+        wb.save(sample_path)
+
+        response = self.client.post(
+            "/api/quality-records/import",
+            data={"file": (io.BytesIO(sample_path.read_bytes()), "quality_upload.xlsx")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["source_file"], "quality_upload.xlsx")
+        self.assertEqual(len(payload["records"]), 1)
+        self.assertEqual(payload["records"][0]["materialName"], "IPA")
+        self.assertEqual(payload["records"][0]["batchNo"], "B20260320")
+
+    def test_record_engine_generate_outputs(self):
+        material_response = self.client.post(
+            "/api/record-engine/generate",
+            json={
+                "template_code": "material_request_112",
+                "shipment_request": {
+                    "order_no": "4515994888",
+                    "date": "2026-03-19",
+                    "department": "資材課",
+                    "requester": "測試員",
+                    "product_name": "RECYCLE GLASS NEG ABC-1 (JEPE)",
+                    "spec": "12吋",
+                    "quantity": 200,
+                    "unit": "片",
+                    "remark": "測試用領料單",
+                    "batch_display": "4515994888/JPAN111001",
+                    "selected_lots": ["JPAN111001"],
+                },
+            },
+        )
+        self.assertEqual(material_response.status_code, 200)
         wb = load_workbook(io.BytesIO(material_response.data))
         ws = wb.active
         self.assertEqual(ws["B3"].value, "資材課")

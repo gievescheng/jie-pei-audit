@@ -202,3 +202,11 @@ def load_existing_production_records() -> tuple[list[dict], str]:
 
 def load_existing_quality_records() -> tuple[list[dict], str]:
     return _choose_best(_scan_workbooks(QUALITY_PREFIX), parse_quality_record_file)
+
+
+def load_uploaded_production_records(path: Path) -> tuple[list[dict], str]:
+    return parse_production_record_file(path), str(path)
+
+
+def load_uploaded_quality_records(path: Path) -> tuple[list[dict], str]:
+    return parse_quality_record_file(path), str(path)

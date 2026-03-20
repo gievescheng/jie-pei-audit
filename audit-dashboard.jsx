@@ -2021,6 +2021,50 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
     }
   }
 
+  async function importRecordFile(kind) {
+    const isProduction = kind === "production";
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".xlsx,.xls";
+    input.onchange = async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      setRecordReadBusy(kind);
+      setMessage("");
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await fetch(
+          isProduction ? "/api/production-records/import" : "/api/quality-records/import",
+          { method: "POST", body: formData }
+        );
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
+        const records = payload.records || [];
+        const label = isProduction ? "生產日報" : "品質記錄";
+        if (!records.length) {
+          setMessage("這份" + label + "沒有讀到可匯入的資料。");
+          return;
+        }
+        const confirmed = window.confirm(
+          "已從「" + (payload.source_file || file.name) + "」解析出 " + records.length + " 筆資料。\n是否用這批資料覆蓋目前頁面內容？"
+        );
+        if (!confirmed) {
+          setMessage("已完成解析，但你暫時沒有覆蓋目前頁面資料。");
+          return;
+        }
+        if (isProduction) setProdRecords(records);
+        else setQualityRecords(records);
+        setMessage("已匯入 " + records.length + " 筆" + label + "資料，來源：" + (payload.source_file || file.name));
+      } catch (err) {
+        setMessage("匯入失敗：" + err.message);
+      } finally {
+        setRecordReadBusy("");
+      }
+    };
+    input.click();
+  }
+
   function buildEnginePayload() {
     const selectedNc = (nonConformances || []).find(item => item.id === selectedNcId) || (nonConformances || [])[0] || null;
     return {
@@ -2178,6 +2222,7 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
         actions={
           <>
             <button onClick={() => loadExistingRecordData("production")} disabled={recordReadBusy !== ""} style={buttonStyle("secondary", recordReadBusy !== "" && recordReadBusy !== "production")}>{recordReadBusy === "production" ? "讀取中..." : "讀取既有生產日報"}</button>
+            <button onClick={() => importRecordFile("production")} disabled={recordReadBusy !== ""} style={buttonStyle("secondary", recordReadBusy !== "" && recordReadBusy !== "production")}>{recordReadBusy === "production" ? "匯入中..." : "匯入生產日報"}</button>
             <button onClick={addProdRecord} style={buttonStyle("primary")}>新增列</button>
           </>
         }
@@ -2214,6 +2259,7 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
         actions={
           <>
             <button onClick={() => loadExistingRecordData("quality")} disabled={recordReadBusy !== ""} style={buttonStyle("secondary", recordReadBusy !== "" && recordReadBusy !== "quality")}>{recordReadBusy === "quality" ? "讀取中..." : "讀取既有品質記錄"}</button>
+            <button onClick={() => importRecordFile("quality")} disabled={recordReadBusy !== ""} style={buttonStyle("secondary", recordReadBusy !== "" && recordReadBusy !== "quality")}>{recordReadBusy === "quality" ? "匯入中..." : "匯入品質記錄"}</button>
             <button onClick={addQualityRecord} style={buttonStyle("success")}>新增列</button>
           </>
         }

@@ -508,6 +508,33 @@ def api_production_records_read_existing():
         return json_error(str(exc), 500)
 
 
+@app.route('/api/production-records/import', methods=['POST'])
+def api_production_records_import():
+    temp_path = None
+    try:
+        import record_imports
+
+        uploaded = request.files.get('file')
+        if not uploaded or not uploaded.filename:
+            return json_error('請先選擇生產日報 Excel 檔案。', 400)
+
+        suffix = Path(uploaded.filename).suffix or '.xlsx'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            uploaded.save(tmp.name)
+            temp_path = Path(tmp.name)
+
+        records, _ = record_imports.load_uploaded_production_records(temp_path)
+        if not records:
+            return json_error('這份檔案沒有讀到可辨識的生產日報資料，請確認是否為正式生產日報格式。', 400)
+        return jsonify({'records': records, 'source_file': uploaded.filename})
+    except Exception as exc:
+        traceback.print_exc()
+        return json_error(str(exc), 500)
+    finally:
+        if temp_path and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+
+
 @app.route('/api/quality-records/read-existing', methods=['GET'])
 def api_quality_records_read_existing():
     try:
@@ -518,6 +545,33 @@ def api_quality_records_read_existing():
     except Exception as exc:
         traceback.print_exc()
         return json_error(str(exc), 500)
+
+
+@app.route('/api/quality-records/import', methods=['POST'])
+def api_quality_records_import():
+    temp_path = None
+    try:
+        import record_imports
+
+        uploaded = request.files.get('file')
+        if not uploaded or not uploaded.filename:
+            return json_error('請先選擇品質檢驗 Excel 檔案。', 400)
+
+        suffix = Path(uploaded.filename).suffix or '.xlsx'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            uploaded.save(tmp.name)
+            temp_path = Path(tmp.name)
+
+        records, _ = record_imports.load_uploaded_quality_records(temp_path)
+        if not records:
+            return json_error('這份檔案沒有讀到可辨識的品質檢驗資料，請確認是否為正式品質記錄格式。', 400)
+        return jsonify({'records': records, 'source_file': uploaded.filename})
+    except Exception as exc:
+        traceback.print_exc()
+        return json_error(str(exc), 500)
+    finally:
+        if temp_path and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
 
 
 @app.route('/api/generate', methods=['POST'])
