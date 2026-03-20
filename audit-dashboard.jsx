@@ -1,0 +1,4201 @@
+import { useState, useEffect } from "react";
+
+// ─── INITIAL DATA ─────────────────────────────────────────────────────────────
+// 儀器資料來源：5 量測資源管理程序/記錄/9.1量規儀器一覽表.docx
+// 校驗計畫：9.3 115年度校驗計劃表.docx
+// 登錄日期即首次納入管理日期；校驗歷史表目前尚無填寫紀錄
+const initialInstruments = [
+  { id: "JE-01", name: "AOI 自動光學檢測儀", type: "AOI",
+    location: "品管課", keeper: "程鼎智", brand: "鏵友益",
+    model: "NA", serialNo: "NA", calibMethod: "遊校",
+    calibratedDate: "2025-09-06", intervalDays: 365,
+    status: "合格", needsMSA: true },
+  { id: "JE-02", name: "WAFER 厚度量測系統", type: "TTV",
+    location: "品管課", keeper: "程鼎智", brand: "奈米趨勢科技",
+    model: "MSCF-C-300(001)", serialNo: "NA", calibMethod: "遊校",
+    calibratedDate: "2025-09-26", intervalDays: 365,
+    status: "合格", needsMSA: true },
+  { id: "JE-03", name: "手持式微粒子計數器", type: "粒子計數器",
+    location: "品管課", keeper: "程鼎智", brand: "拓生科技有限公司",
+    model: "Model 9303", serialNo: "93032542017", calibMethod: "外校",
+    calibratedDate: "2025-11-13", intervalDays: 365,
+    status: "合格", needsMSA: false },
+];
+
+const initialDocuments = [
+  { id:"MM-01", name:"公司品質手冊", type:"管理手冊", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"陳銘煌", retentionYears:16, pdfPath:"0  品質手冊/公司品質手冊(2.0).pdf", docxPath:"0  品質手冊/公司品質手冊(2.0).docx" },
+  { id:"MP-01", name:"文件化資訊管制程序", type:"管理程序", version:"2.0", department:"管理部", createdDate:"2025-12-03", author:"User", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/文件資訊與知識管制程序2.0.docx" },
+  { id:"MP-02", name:"組織環境與績效評估管理程序", type:"管理程序", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"陳佳惠", retentionYears:16, pdfPath:"2 組織環境與績效管理程序/組織環境與績效評估管理程序(2.0).pdf", docxPath:"2 組織環境與績效管理程序/組織環境與績效評估管理程序(2.0).docx" },
+  { id:"MP-03", name:"人力資源及訓練管理程序", type:"管理程序", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"陳佳惠", retentionYears:16, pdfPath:"3 人力資源及訓練管理程序/人力資源及訓練管理程序.pdf", docxPath:"3 人力資源及訓練管理程序/人力資源及訓練管理程序.docx" },
+  { id:"MP-04", name:"設施設備管理程序", type:"管理程序", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"陳文俊", retentionYears:16, pdfPath:"4 設施設備管理程序/設施設備管理程序2.0.pdf", docxPath:"4 設施設備管理程序/設施設備管理程序2.0.docx" },
+  { id:"MP-05", name:"量測資源管理程序", type:"管理程序", version:"2.0", department:"品管課", createdDate:"2025-12-07", author:"陳佳惠", retentionYears:16, pdfPath:"5 量測資源管理程序/量測資源管理程序2.0.pdf", docxPath:"5 量測資源管理程序/量測資源管理程序2.0.docx" },
+  { id:"MP-06", name:"工作環境管理程序", type:"管理程序", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"陳佳惠", retentionYears:16, pdfPath:"6 工作環境管理程序/工作環境管理程序(正式版).pdf", docxPath:"6 工作環境管理程序/工作環境管理程序(正式版).docx" },
+  { id:"MP-07", name:"資訊管理程序", type:"管理程序", version:"2.0", department:"資訊部", createdDate:"2026-03-03", author:"陳佳惠", retentionYears:16, pdfPath:"7 資訊管理程序/資訊管理程序2.0.pdf", docxPath:"7 資訊管理程序/資訊管理程序2.0.docx" },
+  { id:"MP-08", name:"客戶服務管理程序", type:"管理程序", version:"4.0", department:"業務部", createdDate:"2025-12-30", author:"陳佳惠", retentionYears:16, pdfPath:"8 客戶服務管理程序/客戶服務管理程序(4.0).pdf", docxPath:"8 客戶服務管理程序/客戶服務管理程序(4.0).docx" },
+  { id:"MP-08b", name:"新產品導入管理程序", type:"管理程序", version:"2.0", department:"業務部", createdDate:"2026-03-03", author:"陳佳惠", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/新產品導入管理程序.docx" },
+  { id:"MP-09", name:"內部稽核管理程序", type:"管理程序", version:"1.0", department:"品管課", createdDate:"2018-05-23", author:"", retentionYears:16, pdfPath:"9 內部稽核管理程序/內部稽核管理程序.pdf", docxPath:"9 內部稽核管理程序/內部稽核管理程序.docx" },
+  { id:"MP-10", name:"採購及供應商管理程序", type:"管理程序", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"陳佳惠", retentionYears:16, pdfPath:"10 採購及供應商管理程序/採購及供應商管理程序(2.0).pdf", docxPath:"10 採購及供應商管理程序/採購及供應商管理程序(2.0).docx" },
+  { id:"MP-11", name:"生產作業管理程序", type:"管理程序", version:"2.0", department:"生產部", createdDate:"2026-03-03", author:"陳佳惠", retentionYears:16, pdfPath:"11 生產作業管理程序/生產作業管理程序(2.0).pdf", docxPath:"11 生產作業管理程序/生產作業管理程序(2.0).docx" },
+  { id:"MP-12", name:"品質檢驗管理程序", type:"管理程序", version:"3.0", department:"品管課", createdDate:"2025-12-29", author:"陳佳惠", retentionYears:16, pdfPath:"12 品質檢驗管理程序/品質檢驗管理程序3.0.pdf", docxPath:"12 品質檢驗管理程序/品質檢驗管理程序3.0.docx" },
+  { id:"MP-13", name:"不合格品管制程序", type:"管理程序", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"陳佳惠", retentionYears:16, pdfPath:"13 不合格品管制程序/不合格品管制程序.pdf", docxPath:"13 不合格品管制程序/不合格品管制程序.docx" },
+  { id:"MP-14", name:"倉儲管理程序", type:"管理程序", version:"2.0", department:"倉儲部", createdDate:"2026-03-03", author:"陳佳惠", retentionYears:16, pdfPath:"14 倉儲管理程序/倉儲管理程序.pdf", docxPath:"14 倉儲管理程序/倉儲管理程序.docx" },
+  { id:"MP-15", name:"不符合及矯正措施管理程序", type:"管理程序", version:"2.0", department:"品管課", createdDate:"2025-12-20", author:"陳佳惠", retentionYears:16, pdfPath:"15 不符合及矯正措施管理程序/不符合及矯正措施管理程序2.0.pdf", docxPath:"15 不符合及矯正措施管理程序/不符合及矯正措施管理程序2.0.docx" },
+  { id:"MP-16", name:"管理審查程序", type:"管理程序", version:"1.0", department:"管理部", createdDate:"2015-09-09", author:"", retentionYears:16, pdfPath:"16 管理審查程序/管理審查程序.pdf", docxPath:"16 管理審查程序/管理審查程序.docx" },
+  { id:"FR-01-01", name:"1.1 文件制定修訂廢止申請單", type:"表單", version:"2.0", department:"管理部", createdDate:"2026-02-23", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/表單/1.1 文件制定修訂廢止申請單.docx" },
+  { id:"FR-01-02", name:"1.2 文件管制總覽表", type:"表單", version:"2.0", department:"管理部", createdDate:"2026-02-23", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/表單/1.2 文件管制總覽表.docx" },
+  { id:"FR-01-03", name:"品質記錄一覽表", type:"表單", version:"2.0", department:"管理部", createdDate:"2026-02-23", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/表單/1.3 記錄管制總覽表.docx" },
+  { id:"FR-01-04", name:"1.4 知識管理清單", type:"表單", version:"6.0", department:"管理部", createdDate:"2016-10-06", author:"", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/表單/1.4 知識管理清單.docx" },
+  { id:"FR-02-01", name:"品質目標管制表", type:"表單", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"user", retentionYears:16, pdfPath:"", docxPath:"2 組織環境與績效管理程序/表單/2.2 品質目標管制表.docx" },
+  { id:"FR-02-02", name:"會議記錄", type:"表單", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"adadminsrv", retentionYears:16, pdfPath:"", docxPath:"2 組織環境與績效管理程序/表單/2.8 會議記錄.docx" },
+  { id:"FR-03-01", name:"年度單位訓練需求調查表", type:"表單", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"polingtseng", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/表單/3.1教育訓練申請單.docx" },
+  { id:"FR-03-02", name:"3.2年度教育訓練計畫表", type:"表單", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"xx", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/表單/3.2年度教育訓練計畫表.docx" },
+  { id:"FR-03-03", name:"3.3教育訓練簽到表", type:"表單", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/表單/3.3教育訓練簽到表.DOCx" },
+  { id:"FR-03-04", name:"3.4 教育訓練紀錄表", type:"表單", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/表單/3.4 教育訓練紀錄表.DOCx" },
+  { id:"FR-03-05", name:"心得報告", type:"表單", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/表單/3.5心得報告.docx" },
+  { id:"FR-04-01", name:"工程變更說明表", type:"表單", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"User", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/表單/4.2 設備驗收單.docx" },
+  { id:"FR-04-02", name:"4.3 設備保養紀錄表", type:"表單", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"WINDOWS98", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/表單/4.3 設備保養紀錄表.DOCx" },
+  { id:"FR-04-03", name:"機器設備卡", type:"表單", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"ROBERT YU", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/表單/4.4 設備維護履歷卡.docx" },
+  { id:"FR-04-04", name:"4.5設施設備年度校驗計劃表", type:"表單", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"xxx", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/表單/4.5設施設備年度校驗計劃表.docx" },
+  { id:"FR-05-01", name:"量規儀器管理一覽表", type:"表單", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"AGI-ENGR03", retentionYears:16, pdfPath:"", docxPath:"5 量測資源管理程序/表單/5.1量規儀器一覽表.docx" },
+  { id:"FR-05-02", name:"5.2量規儀器履歷表", type:"表單", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"ktchang", retentionYears:16, pdfPath:"", docxPath:"5 量測資源管理程序/表單/5.2量規儀器履歷表.docx" },
+  { id:"FR-05-03", name:"5.3年度校驗計劃表", type:"表單", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"xxx", retentionYears:16, pdfPath:"", docxPath:"5 量測資源管理程序/表單/5.3年度校驗計劃表.docx" },
+  { id:"FR-05-04", name:"5.4校正報告書", type:"表單", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"ktchang", retentionYears:16, pdfPath:"", docxPath:"5 量測資源管理程序/表單/5.4校正報告書.docx" },
+  { id:"FR-08-01", name:"8.2客戶抱怨單（2.0）", type:"表單", version:"10.0", department:"業務部", createdDate:"2025-11-30", author:"鍾木華", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/表單/8.2客戶抱怨單（2.0）.docx" },
+  { id:"FR-08-02", name:"客戶滿意度調查表 NO", type:"表單", version:"2.0", department:"業務部", createdDate:"2026-03-03", author:"user", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/表單/8.3客戶滿意度調查表.docx" },
+  { id:"FR-08-03", name:"9.3材料測試承認表", type:"表單", version:"2.0", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/表單/9.3材料測試承認表.docx" },
+  { id:"FR-08-04", name:"9.5樣品測試承認表", type:"表單", version:"2.0", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/表單/9.5樣品測試承認表.docx" },
+  { id:"FR-09-01", name:"內部稽核計畫表", type:"表單", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"user", retentionYears:16, pdfPath:"", docxPath:"9 內部稽核管理程序/表單/9.1 內部稽核計畫表.DOCx" },
+  { id:"FR-09-02", name:"內部稽核人員名冊", type:"表單", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"9 內部稽核管理程序/表單/9.2 合格內部稽核人員名冊.docx" },
+  { id:"FR-09-03", name:"9.3 內部稽核查檢表", type:"表單", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"TW-Toby", retentionYears:16, pdfPath:"", docxPath:"9 內部稽核管理程序/表單/9.3 內部稽核查檢表.docx" },
+  { id:"FR-09-04", name:"內部環境稽核不符合通知單", type:"表單", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"123", retentionYears:16, pdfPath:"", docxPath:"9 內部稽核管理程序/表單/9.4 內部稽核矯正通知單.docx" },
+  { id:"FR-09-05", name:"9.5 品質稽核報告書", type:"表單", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"TW-Toby", retentionYears:16, pdfPath:"", docxPath:"9 內部稽核管理程序/表單/9.5 品質稽核報告書.docx" },
+  { id:"FR-10-01", name:"致公司", type:"表單", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"User", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/表單/10.1耗材設備訂購單.docx" },
+  { id:"FR-10-02", name:"10.2供應商評鑑表", type:"表單", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/表單/10.2供應商評鑑表.docx" },
+  { id:"FR-10-03", name:"10.3供應商定期評鑑表", type:"表單", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/表單/10.3供應商定期評鑑表.docx" },
+  { id:"FR-10-04", name:"10.4供應商資料表", type:"表單", version:"7.0", department:"採購部", createdDate:"2024-02-15", author:"Hundred Plus", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/表單/10.4供應商資料表.docx" },
+  { id:"FR-13-01", name:"物料/成品特採單", type:"表單", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"charile", retentionYears:16, pdfPath:"", docxPath:"13 不合格品管制程序/表單/13.1特採申請單.docx" },
+  { id:"FR-15-01", name:"15.1不符合及矯正措施報告表", type:"表單", version:"9.0", department:"品管課", createdDate:"2012-02-29", author:"", retentionYears:16, pdfPath:"", docxPath:"15 不符合及矯正措施管理程序/表單/15.1不符合及矯正措施報告表.docx" },
+  { id:"FR-16-01", name:"9.6會議記錄", type:"表單", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"科建经理", retentionYears:16, pdfPath:"", docxPath:"16 管理審查程序/表單/9.6會議記錄.docx" },
+  { id:"RC-01-01", name:"1.1 文件制定修訂廢止申請單", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/記錄/1.1 文件制定修訂廢止申請單.docx" },
+  { id:"RC-01-02", name:"1.1.1 文件制定修訂廢止申請單(新增品質系統文件)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/記錄/1.1.1 文件制定修訂廢止申請單(新增品質系統文件).docx" },
+  { id:"RC-01-03", name:"1.1.2文件制定修訂廢止申請單(2025.10.01品質手冊修改)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/記錄/1.1.2文件制定修訂廢止申請單(2025.10.01品質手冊修改).docx" },
+  { id:"RC-01-04", name:"1.1.3文件制定修訂廢止申請單(2025.10.01客戶服務程序修改)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/記錄/1.1.3文件制定修訂廢止申請單(2025.10.01客戶服務程序修改).docx" },
+  { id:"RC-01-05", name:"1.1.4文件制定修訂廢止申請單(2025.10.01內部稽核程序新增)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/記錄/1.1.4文件制定修訂廢止申請單(2025.10.01內部稽核程序新增).docx" },
+  { id:"RC-01-06", name:"1.1.5文件制定修訂廢止申請單(2025.10.01管理審核程序新增)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/記錄/1.1.5文件制定修訂廢止申請單(2025.10.01管理審核程序新增).docx" },
+  { id:"RC-01-07", name:"1.1.6文件制定修訂廢止申請單(2025.12.01程序改版)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/記錄/1.1.6文件制定修訂廢止申請單(2025.12.01程序改版).docx" },
+  { id:"RC-01-08", name:"1.2MM(品質手冊)-文件管制總覽表", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/記錄/1.2MM(品質手冊)-文件管制總覽表.docx" },
+  { id:"RC-01-09", name:"1.2MP(程序書)-文件管制總覽表", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/記錄/1.2MP(程序書)-文件管制總覽表.docx" },
+  { id:"RC-01-10", name:"1.2RW(三階文件)-文件管制總覽表", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/記錄/1.2RW(三階文件)-文件管制總覽表.docx" },
+  { id:"RC-01-11", name:"品質記錄一覽表", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/記錄/1.3 記錄管制總覽表.docx" },
+  { id:"RC-01-12", name:"1.4 知識管理清單", type:"記錄", version:"10.0", department:"管理部", createdDate:"2025-08-26", author:"USER", retentionYears:16, pdfPath:"", docxPath:"1 文件化資訊管制程序/記錄/1.4 知識管理清單.docx" },
+  { id:"RC-02-01", name:"品質目標管制表", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"user", retentionYears:16, pdfPath:"", docxPath:"2 組織環境與績效管理程序/記錄/2.2品質目標管制表(114)-ok.docx" },
+  { id:"RC-03-01", name:"年度單位訓練需求調查表", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"polingtseng", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/115年度教育訓練/3.1教育訓練申請單.docx" },
+  { id:"RC-03-02", name:"3.3.1教育訓練簽到表(ISO 9001品質管理標準教育訓練班)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.3.1教育訓練簽到表(ISO 9001品質管理標準教育訓練班).DOCx" },
+  { id:"RC-03-03", name:"3.3.2教育訓練簽到表(內部稽核員訓練)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.3.2教育訓練簽到表(內部稽核員訓練).DOCx" },
+  { id:"RC-03-04", name:"3.3.3教育訓練簽到表(品質管理程序文件訓練)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.3.3教育訓練簽到表(品質管理程序文件訓練).DOCx" },
+  { id:"RC-03-05", name:"3.3.4教育訓練簽到表(產品相關作業操作及檢驗標準訓練)-2", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.3.4教育訓練簽到表(產品相關作業操作及檢驗標準訓練)-2.DOCx" },
+  { id:"RC-03-06", name:"3.3.4教育訓練簽到表(產品相關作業操作及檢驗標準訓練)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.3.4教育訓練簽到表(產品相關作業操作及檢驗標準訓練).DOCx" },
+  { id:"RC-03-07", name:"3.3.5教育訓練簽到表(環安相關)-2", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.3.5教育訓練簽到表(環安相關)-2.DOCx" },
+  { id:"RC-03-08", name:"3.3.5教育訓練簽到表(環安相關)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.3.5教育訓練簽到表(環安相關).DOCx" },
+  { id:"RC-03-09", name:"3.3.6教育訓練簽到表(消防訓練)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.3.6教育訓練簽到表(消防訓練).DOCx" },
+  { id:"RC-03-10", name:"3.3教育訓練簽到表(ISO 9001品質管理標準教育訓練班)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.3教育訓練簽到表(ISO 9001品質管理標準教育訓練班).DOCx" },
+  { id:"RC-03-11", name:"3.3教育訓練簽到表(內部稽核員訓練)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.3教育訓練簽到表(內部稽核員訓練).DOCx" },
+  { id:"RC-03-12", name:"3.3教育訓練簽到表(品質管理程序文件訓練)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.3教育訓練簽到表(品質管理程序文件訓練).DOCx" },
+  { id:"RC-03-13", name:"3.3教育訓練簽到表(產品相關作業操作及檢驗標準訓練)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.3教育訓練簽到表(產品相關作業操作及檢驗標準訓練).DOCx" },
+  { id:"RC-03-14", name:"3.4.1 教育訓練紀錄表(劉哲驊)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.4.1 教育訓練紀錄表(劉哲驊).docx" },
+  { id:"RC-03-15", name:"3.4.2 教育訓練紀錄表(蔡有為)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.4.2 教育訓練紀錄表(蔡有為).docx" },
+  { id:"RC-03-16", name:"3.4.3 教育訓練紀錄表(林佑翰)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.4.3 教育訓練紀錄表(林佑翰).docx" },
+  { id:"RC-03-17", name:"3.4.4 教育訓練紀錄表(詹博智)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.4.4 教育訓練紀錄表(詹博智).docx" },
+  { id:"RC-03-18", name:"3.4.5 教育訓練紀錄表(程鼎智)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.4.5 教育訓練紀錄表(程鼎智).docx" },
+  { id:"RC-03-19", name:"3.4.6 教育訓練紀錄表(林育陞)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.4.6 教育訓練紀錄表(林育陞).docx" },
+  { id:"RC-03-20", name:"3.4.7 教育訓練紀錄表(楊麗璇)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.4.7 教育訓練紀錄表(楊麗璇).docx" },
+  { id:"RC-03-21", name:"3.4.8 教育訓練紀錄表(朱姿霖)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.4.8 教育訓練紀錄表(朱姿霖).docx" },
+  { id:"RC-03-22", name:"3.4.9 教育訓練紀錄表(陳宥穎)", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"110", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/3.4.9 教育訓練紀錄表(陳宥穎).docx" },
+  { id:"RC-03-23", name:"4.2年度教育訓練計畫表", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"xx", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/114年度教育訓練/4.2年度教育訓練計畫表.docx" },
+  { id:"RC-03-24", name:"4.2年度教育訓練計畫表", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"xx", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/115年度教育訓練/4.2年度教育訓練計畫表.docx" },
+  { id:"RC-03-25", name:"4.6教育訓練統計表", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"xx", retentionYears:16, pdfPath:"", docxPath:"3 人力資源及訓練管理程序/記錄/114年度教育訓練/4.6教育訓練統計表.docx" },
+  { id:"RC-04-01", name:"工程變更說明表", type:"記錄", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"User", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.2.1設備驗收單(超音波).docx" },
+  { id:"RC-04-02", name:"4.2.2設備驗收單(清洗機)", type:"記錄", version:"10.0", department:"設備部", createdDate:"2025-08-26", author:"USER", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.2.2設備驗收單(清洗機).docx" },
+  { id:"RC-04-03", name:"4.2.3設備驗收單(AOI)", type:"記錄", version:"10.0", department:"設備部", createdDate:"2025-09-26", author:"USER", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.2.3設備驗收單(AOI).docx" },
+  { id:"RC-04-04", name:"4.2.3設備驗收單(OCR篩選機)", type:"記錄", version:"8.0", department:"設備部", createdDate:"2025-09-26", author:"USER", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.2.3設備驗收單(OCR篩選機).docx" },
+  { id:"RC-04-05", name:"4.2.4設備驗收單(OCR篩選機)", type:"記錄", version:"8.0", department:"設備部", createdDate:"2025-09-26", author:"USER", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.2.4設備驗收單(OCR篩選機).docx" },
+  { id:"RC-04-06", name:"4.2.4設備驗收單(TTV)", type:"記錄", version:"8.0", department:"設備部", createdDate:"2025-09-26", author:"USER", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.2.4設備驗收單(TTV).docx" },
+  { id:"RC-04-07", name:"4.2.5設備驗收單(AOI)", type:"記錄", version:"9.0", department:"設備部", createdDate:"2025-09-26", author:"USER", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.2.5設備驗收單(AOI).docx" },
+  { id:"RC-04-08", name:"4.2.6設備驗收單(TTV)", type:"記錄", version:"8.0", department:"設備部", createdDate:"2025-09-26", author:"USER", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.2.6設備驗收單(TTV).docx" },
+  { id:"RC-04-09", name:"4.2.7設備驗收單(NAS系統網路硬碟)", type:"記錄", version:"4.0", department:"設備部", createdDate:"2025-11-30", author:"USER", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.2.7設備驗收單(NAS系統網路硬碟).docx" },
+  { id:"RC-04-10", name:"機器設備卡", type:"記錄", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"ROBERT YU", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.4.1潔沛設備維護履歷卡(超音波清洗機).docx" },
+  { id:"RC-04-11", name:"機器設備卡", type:"記錄", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"ROBERT YU", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/設備保養紀錄表114年度/4.4.1潔沛設備維護履歷卡(超音波清洗機).docx" },
+  { id:"RC-04-12", name:"機器設備卡", type:"記錄", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"ROBERT YU", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/設備保養紀錄表114年度/4.4.2潔沛設備維護履歷卡(清洗機).docx" },
+  { id:"RC-04-13", name:"機器設備卡", type:"記錄", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"ROBERT YU", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.4.2潔沛設備維護履歷卡(終端清洗機).docx" },
+  { id:"RC-04-14", name:"機器設備卡", type:"記錄", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"ROBERT YU", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.4.3潔沛設備維護履歷卡(OCR篩選機).docx" },
+  { id:"RC-04-15", name:"機器設備卡", type:"記錄", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"ROBERT YU", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.4.4潔沛設備維護履歷卡(AOI).docx" },
+  { id:"RC-04-16", name:"機器設備卡", type:"記錄", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"ROBERT YU", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.4.5潔沛設備維護履歷卡(TTV).docx" },
+  { id:"RC-04-17", name:"機器設備卡", type:"記錄", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"ROBERT YU", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.4.6潔沛設備維護履歷卡(NAS).docx" },
+  { id:"RC-04-18", name:"4.5.1設施設備年度計劃表", type:"記錄", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"xxx", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/4.5.1設施設備年度計劃表.docx" },
+  { id:"RC-04-19", name:"機器設備卡", type:"記錄", version:"2.0", department:"設備部", createdDate:"2026-03-03", author:"ROBERT YU", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/設備保養紀錄表114年度/潔沛設備維護履歷卡(空壓機) (2).docx" },
+  { id:"RC-04-20", name:"潔沛設備維護履歷卡(空壓機)", type:"記錄", version:"9.0", department:"設備部", createdDate:"2025-09-02", author:"USER", retentionYears:16, pdfPath:"", docxPath:"4 設施設備管理程序/記錄/設備保養紀錄表114年度/潔沛設備維護履歷卡(空壓機).docx" },
+  { id:"RC-05-01", name:"量規儀器管理一覽表", type:"記錄", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"AGI-ENGR03", retentionYears:16, pdfPath:"", docxPath:"5 量測資源管理程序/記錄/9.1量規儀器一覽表.docx" },
+  { id:"RC-05-02", name:"9.2.1量規儀器履歷表AOI", type:"記錄", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"ktchang", retentionYears:16, pdfPath:"", docxPath:"5 量測資源管理程序/記錄/9.2.1量規儀器履歷表AOI.docx" },
+  { id:"RC-05-03", name:"9.2.2量規儀器履歷表WAFER 厚度量測系統", type:"記錄", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"ktchang", retentionYears:16, pdfPath:"", docxPath:"5 量測資源管理程序/記錄/9.2.2量規儀器履歷表WAFER 厚度量測系統.docx" },
+  { id:"RC-05-04", name:"9.2.3量規儀器履歷表手持式微粒子計數器", type:"記錄", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"ktchang", retentionYears:16, pdfPath:"", docxPath:"5 量測資源管理程序/記錄/9.2.3量規儀器履歷表手持式微粒子計數器.docx" },
+  { id:"RC-05-05", name:"9.3 115年度校驗計劃表", type:"記錄", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"xxx", retentionYears:16, pdfPath:"", docxPath:"5 量測資源管理程序/記錄/115年度校正/9.3 115年度校驗計劃表.docx" },
+  { id:"RC-05-06", name:"免校正貼紙", type:"記錄", version:"10.0", department:"品管課", createdDate:"2022-06-20", author:"USER", retentionYears:16, pdfPath:"", docxPath:"5 量測資源管理程序/記錄/免校正貼紙.docx" },
+  { id:"RC-05-07", name:"校正合格貼紙", type:"記錄", version:"10.0", department:"品管課", createdDate:"2022-06-20", author:"USER", retentionYears:16, pdfPath:"", docxPath:"5 量測資源管理程序/記錄/校正合格貼紙.docx" },
+  { id:"RC-08-01", name:"客戶滿意度調查表 NO", type:"記錄", version:"2.0", department:"業務部", createdDate:"2026-03-03", author:"user", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/記錄/8.3客戶滿意度調查表.docx" },
+  { id:"RC-08-02", name:"9.3材料測試承認表", type:"記錄", version:"2.0", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/記錄/客戶代號C001測試紀錄/9.3材料測試承認表.docx" },
+  { id:"RC-08-03", name:"9.3材料測試承認表", type:"記錄", version:"2.0", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/記錄/客戶代號C002測試紀錄/9.3材料測試承認表.docx" },
+  { id:"RC-08-04", name:"9.3樣品測試承認表(2025.12.01)", type:"記錄", version:"2.0", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/記錄/客戶代號C002測試紀錄/9.3樣品測試承認表(2025.12.01).docx" },
+  { id:"RC-08-05", name:"9.3樣品測試承認表(2025.12.02)", type:"記錄", version:"2.0", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/記錄/客戶代號C002測試紀錄/9.3樣品測試承認表(2025.12.02).docx" },
+  { id:"RC-08-06", name:"9.3樣品測試承認表(2025.12.10)", type:"記錄", version:"2.0", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/記錄/客戶代號C002測試紀錄/9.3樣品測試承認表(2025.12.10).docx" },
+  { id:"RC-08-07", name:"9.3樣品測試承認表(2025.12.10)放量測試", type:"記錄", version:"2.0", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/記錄/客戶代號C002測試紀錄/9.3樣品測試承認表(2025.12.10)放量測試.docx" },
+  { id:"RC-08-08", name:"9.3樣品測試承認表(美光)114.09.05", type:"記錄", version:"9.05", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/記錄/客戶代號C001測試紀錄/9.3樣品測試承認表(美光)114.09.05.docx" },
+  { id:"RC-08-09", name:"9.3樣品測試承認表(美光)114.09.15", type:"記錄", version:"9.15", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/記錄/客戶代號C001測試紀錄/9.3樣品測試承認表(美光)114.09.15.docx" },
+  { id:"RC-08-10", name:"9.3樣品測試承認表(美光)114.09.19", type:"記錄", version:"9.19", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/記錄/客戶代號C001測試紀錄/9.3樣品測試承認表(美光)114.09.19.docx" },
+  { id:"RC-08-11", name:"9.3樣品測試承認表(美光)114.09.26", type:"記錄", version:"9.26", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/記錄/客戶代號C001測試紀錄/9.3樣品測試承認表(美光)114.09.26.docx" },
+  { id:"RC-08-12", name:"9.3樣品測試承認表(美光)114.10.03", type:"記錄", version:"10.03", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/記錄/客戶代號C001測試紀錄/9.3樣品測試承認表(美光)114.10.03.docx" },
+  { id:"RC-08-13", name:"9.3樣品測試承認表(美光)114.10.13", type:"記錄", version:"10.13", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/記錄/客戶代號C001測試紀錄/9.3樣品測試承認表(美光)114.10.13.docx" },
+  { id:"RC-08-14", name:"9.3樣品測試承認表(美光)114.10.17", type:"記錄", version:"10.17", department:"業務部", createdDate:"2026-03-03", author:"DAVIDHSU", retentionYears:16, pdfPath:"", docxPath:"8 客戶服務管理程序/記錄/客戶代號C001測試紀錄/9.3樣品測試承認表(美光)114.10.17.docx" },
+  { id:"RC-09-01", name:"內部稽核計畫表", type:"記錄", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"user", retentionYears:16, pdfPath:"", docxPath:"9 內部稽核管理程序/記錄/內部稽核114年度/9.1 內部稽核計畫表.DOCx" },
+  { id:"RC-09-02", name:"內部稽核人員名冊", type:"記錄", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"9 內部稽核管理程序/記錄/內部稽核114年度/9.2 合格內部稽核人員名冊.docx" },
+  { id:"RC-09-03", name:"內部環境稽核不符合通知單", type:"記錄", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"123", retentionYears:16, pdfPath:"", docxPath:"9 內部稽核管理程序/記錄/內部稽核114年度/9.4內部稽核矯正通知單.docx" },
+  { id:"RC-09-04", name:"9.5 品質稽核報告書", type:"記錄", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"TW-Toby", retentionYears:16, pdfPath:"", docxPath:"9 內部稽核管理程序/記錄/內部稽核114年度/9.5 品質稽核報告書.docx" },
+  { id:"RC-09-05", name:"9.6會議記錄(0916修改)", type:"記錄", version:"2.0", department:"品管課", createdDate:"2026-03-03", author:"科建经理", retentionYears:16, pdfPath:"", docxPath:"9 內部稽核管理程序/記錄/內部稽核114年度/9.6會議記錄(0916修改).docx" },
+  { id:"RC-10-01", name:"致公司", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"User", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.1耗材設備訂購單(11月6日).docx" },
+  { id:"RC-10-02", name:"致公司", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"User", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.1耗材設備訂購單(12月19日).docx" },
+  { id:"RC-10-03", name:"致公司", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"User", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.1耗材設備訂購單(12月24日).docx" },
+  { id:"RC-10-04", name:"致公司", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"User", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.1耗材設備訂購單(2026年1月15日).docx" },
+  { id:"RC-10-05", name:"致公司", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"User", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.1耗材設備訂購單(2026年1月2日).docx" },
+  { id:"RC-10-06", name:"致公司", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"User", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.1耗材設備訂購單(2026年2月11日).docx" },
+  { id:"RC-10-07", name:"致公司", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"User", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.1耗材設備訂購單(2026年2月23日).docx" },
+  { id:"RC-10-08", name:"致公司", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"User", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.1耗材設備訂購單(7月16日).docx" },
+  { id:"RC-10-09", name:"致公司", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"User", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.1耗材設備訂購單(9月2日).docx" },
+  { id:"RC-10-10", name:"10.3.1供應商定期評鑑表-1(楊特)", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.3.1供應商定期評鑑表-1(楊特).docx" },
+  { id:"RC-10-11", name:"10.3.2供應商評鑑管理表-2(金華瑋)", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.3.2供應商評鑑管理表-2(金華瑋).docx" },
+  { id:"RC-10-12", name:"10.3.3供應商評鑑管理表-3(2025柏連)", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.3.3供應商評鑑管理表-3(2025柏連).docx" },
+  { id:"RC-10-13", name:"10.3.4供應商定期評鑑表-4(鏵友益)", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.3.4供應商定期評鑑表-4(鏵友益).docx" },
+  { id:"RC-10-14", name:"10.3.5供應商定期評鑑表-5(奈米趨勢)", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.3.5供應商定期評鑑表-5(奈米趨勢).docx" },
+  { id:"RC-10-15", name:"10.3.6供應商定期評鑑表-6(拓生科技)", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.3.6供應商定期評鑑表-6(拓生科技).docx" },
+  { id:"RC-10-16", name:"10.3供應商定期評鑑表(2025潔沛)", type:"記錄", version:"2.0", department:"採購部", createdDate:"2026-03-03", author:"USER", retentionYears:16, pdfPath:"", docxPath:"10 採購及供應商管理程序/記錄/10.3供應商定期評鑑表(2025潔沛).docx" },
+  { id:"RC-15-01", name:"15.1.1不符合及矯正措施報告表", type:"記錄", version:"8.0", department:"品管課", createdDate:"2025-11-13", author:"USER", retentionYears:16, pdfPath:"", docxPath:"15 不符合及矯正措施管理程序/記錄/15.1.1不符合及矯正措施報告表.docx" },
+  { id:"RC-15-02", name:"15.1.2不符合及矯正措施報告表", type:"記錄", version:"8.0", department:"品管課", createdDate:"2026-01-28", author:"USER", retentionYears:16, pdfPath:"", docxPath:"15 不符合及矯正措施管理程序/記錄/15.1.2不符合及矯正措施報告表.docx" },
+  { id:"RC-16-01", name:"會議記錄", type:"記錄", version:"2.0", department:"管理部", createdDate:"2026-03-03", author:"科建经理", retentionYears:16, pdfPath:"", docxPath:"16 管理審查程序/記錄/會議記錄.docx" }
+];
+
+// 三階文件（設備手冊及作業指導書）
+const initialManuals = [
+  { id:"RW-05", name:"藥水回收作業指導書", type:"作業指導書", version:"4.0", department:"設備部", createdDate:"2025-09-15", author:"python-docx", retentionYears:16, pdfPath:"", docxPath:"三階文件/RW-05藥水回收作業指導書.docx" },
+  { id:"RW-12", name:"營運連續性計畫", type:"作業指導書", version:"3.0", department:"設備部", createdDate:"2025-11-19", author:"USER", retentionYears:16, pdfPath:"", docxPath:"三階文件/RW-12營運連續性計畫.docx" },
+  { id:"RW-15", name:"FMEA管理辦法", type:"作業指導書", version:"2.0", department:"設備部", createdDate:"2025-12-16", author:"USER", retentionYears:16, pdfPath:"", docxPath:"三階文件/RW-15 FMEA管理辦法.docx" },
+  { id:"RW-01", name:"鏵友益_12inch wafer Chipping AOI & OCR System_保養手冊_Ver1.0", type:"作業指導書", version:"1.0", department:"設備部", createdDate:"2025-10-23", author:"HYE", retentionYears:16, pdfPath:"", docxPath:"三階文件/RW01鏵友益_12inch wafer Chipping AOI & OCR System_保養手冊_Ver1.0.docx" },
+  { id:"RW-03", name:"超音波01988三槽半自動槽操作手冊", type:"作業指導書", version:"4.0", department:"設備部", createdDate:"2025-09-18", author:"1", retentionYears:16, pdfPath:"", docxPath:"三階文件/RW03超音波01988三槽半自動槽操作手冊.docx" },
+  { id:"RW-04", name:"潔沛終端清洗機-操作手冊", type:"作業指導書", version:"4.0", department:"設備部", createdDate:"2025-09-18", author:"USER", retentionYears:16, pdfPath:"", docxPath:"三階文件/RW04潔沛終端清洗機-操作手冊.docx" },
+  { id:"RW-05b", name:"原料、成品抽樣與檢驗項目之標準作業程序", type:"作業指導書", version:"6.0", department:"設備部", createdDate:"2025-09-15", author:"Microsoft Office User", retentionYears:16, pdfPath:"", docxPath:"三階文件/RW05原料、成品抽樣與檢驗項目之標準作業程序.docx" },
+  { id:"RW-06", name:"潔沛企業有限公司無塵室管理", type:"作業指導書", version:"4.0", department:"設備部", createdDate:"2025-09-05", author:"USER", retentionYears:16, pdfPath:"", docxPath:"三階文件/RW06潔沛企業有限公司無塵室管理.docx" },
+  { id:"RW-07", name:"半導體玻璃基材清洗流程", type:"作業指導書", version:"4.0", department:"設備部", createdDate:"2013-12-23", author:"python-docx", retentionYears:16, pdfPath:"", docxPath:"三階文件/RW07半導體玻璃基材清洗流程.docx" },
+  { id:"RW-07b", name:"潔沛企業有限公司無塵室管理", type:"作業指導書", version:"6.0", department:"設備部", createdDate:"2025-09-05", author:"USER", retentionYears:16, pdfPath:"", docxPath:"三階文件/RW07潔沛企業有限公司無塵室管理.docx" },
+  { id:"RW-08", name:"職務說明書", type:"作業指導書", version:"5.0", department:"設備部", createdDate:"2025-09-15", author:"Microsoft Office User", retentionYears:16, pdfPath:"", docxPath:"三階文件/RW08職務說明書.docx" },
+  { id:"RW-10", name:"職務說明書", type:"作業指導書", version:"6.0", department:"設備部", createdDate:"2025-09-15", author:"Microsoft Office User", retentionYears:16, pdfPath:"", docxPath:"三階文件/RW10職務說明書.docx" },
+  { id:"RW-16", name:"各站點OCAPSOPv1.0", type:"作業指導書", version:"1.0", department:"設備部", createdDate:"2025-12-14", author:"python-docx", retentionYears:16, pdfPath:"", docxPath:"三階文件/RW16各站點OCAPSOPv1.0.docx" },
+  { id:"RW-01-PDF", name:"12吋 Wafer AOI 使用手冊", type:"作業指導書", version:"1.0", department:"品管課", createdDate:"", author:"鏵友益電子", retentionYears:16, pdfPath:"三階文件/RW01鏵友益_12inch Wafer AOI使用手冊_v1.0.pdf", docxPath:"" },
+  { id:"RW-02", name:"12吋 Wafer Chipping AOI 使用手冊", type:"作業指導書", version:"1.0", department:"品管課", createdDate:"", author:"鏵友益電子", retentionYears:16, pdfPath:"三階文件/RW02鏵友益_12inch Wafer Chipping AOI使用手冊_v1.0(筛選機).pdf", docxPath:"" },
+  { id:"RW-09", name:"空壓機 AM3-37A-E30 操作手冊", type:"作業指導書", version:"1.0", department:"設備部", createdDate:"", author:"原廠商", retentionYears:16, pdfPath:"三階文件/RW09空壓機AM3-37A-E30_Manual.pdf", docxPath:"" },
+  { id:"RW-10-PDF", name:"手持式微粒子計數器操作手冊", type:"作業指導書", version:"1.0", department:"品管課", createdDate:"", author:"拓生科技", retentionYears:16, pdfPath:"三階文件/RW10手持式微粒子計數器操作手冊 Model9303+軟體.pdf", docxPath:"" },
+  { id:"RW-11", name:"玻璃晶圓 TTV 量測儀操作手冊", type:"作業指導書", version:"1.0", department:"品管課", createdDate:"", author:"原廠商", retentionYears:16, pdfPath:"三階文件/RW11玻璃晶圓否度量測專操作手冊_MSCF-C-0300(001)(真空產生器).pdf", docxPath:"" }
+];
+
+// 訓練資料來源：3 人力資源及訓練管理程序/記錄/3.4.1~3.4.9 教育訓練紀錄表(name).docx
+// 員工職稱來源：9 內部稽核管理程序/記錄/內部稽核114年度/9.2 合格內部稽核人員名冊.docx
+// 訓練日期欄位目前文件未填寫，保留空白
+const initialTraining = [
+  { id: "EMP-001", name: "劉哲驊", dept: "管理部", role: "協理", hireDate: "2021-07-01", trainings: [
+    { course: "ISO9001品質管理標準教育訓練班", date: "", type: "外訓", result: "合格", cert: "無" },
+    { course: "ISO9001內部稽核員訓練", date: "", type: "外訓", result: "合格", cert: "無" },
+    { course: "品質管理程序文件訓練", date: "", type: "內訓", result: "合格", cert: "無" },
+  ]},
+  { id: "EMP-002", name: "蔡有為", dept: "管理部", role: "部長", hireDate: "2021-07-01", trainings: [
+    { course: "ISO9001品質管理標準教育訓練班", date: "", type: "外訓", result: "合格", cert: "無" },
+    { course: "ISO9001內部稽核員訓練", date: "", type: "外訓", result: "合格", cert: "無" },
+    { course: "品質管理程序文件訓練", date: "", type: "內訓", result: "合格", cert: "無" },
+  ]},
+  { id: "EMP-003", name: "林佑翰", dept: "業務部", role: "組長", hireDate: "2022-09-01", trainings: [
+    { course: "ISO9001品質管理標準教育訓練班", date: "", type: "外訓", result: "合格", cert: "無" },
+    { course: "ISO9001內部稽核員訓練", date: "", type: "外訓", result: "合格", cert: "無" },
+    { course: "品質管理程序文件訓練", date: "", type: "內訓", result: "合格", cert: "無" },
+  ]},
+  { id: "EMP-004", name: "詹博智", dept: "生產課", role: "組長", hireDate: "2024-03-01", trainings: [
+    { course: "ISO9001品質管理標準教育訓練班", date: "", type: "外訓", result: "合格", cert: "無" },
+    { course: "ISO9001內部稽核員訓練", date: "", type: "外訓", result: "合格", cert: "無" },
+    { course: "品質管理程序文件訓練", date: "", type: "內訓", result: "合格", cert: "無" },
+    { course: "量測儀器校正與管理訓練", date: "", type: "外訓", result: "合格", cert: "無" },
+  ]},
+  { id: "EMP-005", name: "程鼎智", dept: "品管課", role: "課長", hireDate: "2021-07-01", trainings: [
+    { course: "ISO9001品質管理標準教育訓練班", date: "", type: "外訓", result: "合格", cert: "無" },
+    { course: "ISO9001內部稽核員訓練", date: "", type: "外訓", result: "合格", cert: "無" },
+    { course: "品質管理程序文件訓練", date: "", type: "內訓", result: "合格", cert: "無" },
+  ]},
+  { id: "EMP-006", name: "吳澤仁", dept: "業務部", role: "部長", hireDate: "2021-07-01", trainings: [
+    { course: "ISO9001品質管理標準教育訓練班", date: "", type: "外訓", result: "合格", cert: "無" },
+    { course: "ISO9001內部稽核員訓練", date: "", type: "外訓", result: "合格", cert: "無" },
+    { course: "品質管理程序文件訓練", date: "", type: "內訓", result: "合格", cert: "無" },
+  ]},
+  { id: "EMP-007", name: "林育陞", dept: "", role: "", hireDate: "", trainings: [
+    { course: "產品相關作業操作及檢驗標準訓練", date: "", type: "內訓", result: "合格", cert: "無" },
+    { course: "消防常識與火災預防", date: "", type: "內訓", result: "合格", cert: "無" },
+  ]},
+  { id: "EMP-008", name: "楊麗璇", dept: "", role: "", hireDate: "", trainings: [
+    { course: "產品相關作業操作及檢驗標準訓練", date: "", type: "內訓", result: "合格", cert: "無" },
+    { course: "消防常識與火災預防", date: "", type: "內訓", result: "合格", cert: "無" },
+  ]},
+  { id: "EMP-009", name: "朱姿霖", dept: "", role: "", hireDate: "", trainings: [
+    { course: "產品相關作業操作及檢驗標準訓練", date: "", type: "內訓", result: "合格", cert: "無" },
+  ]},
+  { id: "EMP-010", name: "陳宥穎", dept: "", role: "", hireDate: "", trainings: [
+    { course: "產品相關作業操作及檢驗標準訓練", date: "", type: "內訓", result: "合格", cert: "無" },
+  ]},
+];
+
+// 設備資料來源：4 設施設備管理程序/記錄/4.4.1~4.4.6 潔沛設備維護履歷卡(name).docx
+// 年度計劃：4 設施設備管理程序/記錄/4.5.1 設施設備年度計劃表.docx
+// JE-005 TTV 目前尚無維護履歷紀錄，保留空白
+const initialEquipment = [
+  { id: "JE-001", name: "超音波清洗機", location: "生產課", lastMaintenance: "2025-08-31", intervalDays: 30, nextItems: ["清洗槽清潔", "超音波強度確認", "加熱溫度校驗", "排水管路檢查"] },
+  { id: "JE-002", name: "終端清洗機", location: "生產課", lastMaintenance: "2025-08-29", intervalDays: 90, nextItems: ["清洗槽清潔", "藥液濃度確認", "噴嘴清潔", "馬達運轉確認"] },
+  { id: "JE-003", name: "OCR 篩選機", location: "生產課", lastMaintenance: "2025-09-06", intervalDays: 90, nextItems: ["光學鏡頭清潔", "排序正確性確認", "定位精度確認", "傳送帶清潔"] },
+  { id: "JE-004", name: "AOI 自動光學檢測儀", location: "品管課", lastMaintenance: "2025-09-06", intervalDays: 90, nextItems: ["光源強度校驗", "鏡頭清潔", "定位精度確認", "軟體更新確認"] },
+  { id: "JE-005", name: "WAFER 厚度量測系統", location: "品管課", lastMaintenance: "", intervalDays: 180, nextItems: ["量測精度確認", "探針清潔", "真空系統確認", "定位校驗"] },
+  { id: "JE-006", name: "NAS 網路儲存系統", location: "管理部", lastMaintenance: "2025-09-09", intervalDays: 365, nextItems: ["硬碟健康狀態確認", "備份完整性確認", "網路連線確認", "UPS 電池確認"] },
+];
+
+// 供應商資料來源：10 採購及供應商管理程序/記錄/10.3.1~10.3.6 供應商定期評鑑表(name).docx
+// 評鑑日期欄位目前文件未填寫，保留空白；聯絡人文件未記載
+const initialSuppliers = [
+  { id: "SUP-001", name: "楊特企業有限公司", category: "耗材", contact: "", lastEvalDate: "", evalScore: 95, evalResult: "優良", evalIntervalDays: 365, issues: [] },
+  { id: "SUP-002", name: "金華瑋科技有限公司", category: "設備零件", contact: "", lastEvalDate: "", evalScore: 95, evalResult: "優良", evalIntervalDays: 365, issues: [] },
+  { id: "SUP-003", name: "柏連企業股份有限公司", category: "化學品", contact: "", lastEvalDate: "", evalScore: 100, evalResult: "優良", evalIntervalDays: 365, issues: [] },
+  { id: "SUP-004", name: "鏵友益科技股份有限公司", category: "量測設備", contact: "", lastEvalDate: "", evalScore: 100, evalResult: "優良", evalIntervalDays: 365, issues: [] },
+  { id: "SUP-005", name: "奈米趨勢科技有限公司", category: "量測設備", contact: "", lastEvalDate: "", evalScore: 100, evalResult: "優良", evalIntervalDays: 365, issues: [] },
+  { id: "SUP-006", name: "拓生科技有限公司", category: "量測設備", contact: "", lastEvalDate: "", evalScore: 100, evalResult: "優良", evalIntervalDays: 365, issues: [] },
+];
+
+// 不符合資料來源：15 不符合及矯正措施管理程序/記錄/15.1.1~15.1.2 不符合及矯正措施報告表.docx
+// 共2筆有文件記錄；原假造的5筆（NC-2025-001~005）已移除
+const initialNonConformances = [
+  { id: "NC-2025-001", date: "2025-11-12",
+    dept: "品管課", type: "人員作業",
+    description: "在品檢室進行作業時，不慎撞到已洗完待檢測的玻璃，導致掉落地板破裂。",
+    severity: "輕微",
+    rootCause: "品管作業員在作業時不慎撞到 FOSB 盒，導致盒子掉落並摔破玻璃片。",
+    correctiveAction: "作業員立即清理現場並確認無玻璃碎片殘留，另行包裝破碎玻璃片至包裝袋並隔離儲存；主管提醒作業員注意各物品擺放。",
+    responsible: "林佑翰", dueDate: "", status: "已關閉", closeDate: "2025-11-12", effectiveness: "有效" },
+  { id: "NC-2026-001", date: "2026-01-28",
+    dept: "品檢課", type: "人員作業",
+    description: "品檢人員於 AOI 檢驗後取出 NG 品放置 FOSB，中途玻璃脫落導致破片。",
+    severity: "輕微",
+    rootCause: "AOI 測試判定 NG 後，取出放置 NG FOSB 時操作不慎，玻璃脫落破片。",
+    correctiveAction: "加強作業員操作訓練，明確規範 FOSB 取放動作要領，並更新作業 SOP。",
+    responsible: "朱姿霖", dueDate: "", status: "處理中", closeDate: "", effectiveness: "" },
+];
+
+// 稽核計畫資料來源：9 內部稽核管理程序/記錄/內部稽核114年度/
+// 9.5 品質稽核報告書（114/09/04~05 全廠，稽核員蔡有為，20 OK 4 NG）
+// 9.4 內部稽核矯正通知單（114/06/23 品管課，稽核員蔡有為，發出矯正通知）
+// 原假造的9筆（IA-2025-01~06, IA-2026-01~03）已移除
+const initialAuditPlans = [
+  { id: "IA-2025-01", year: 2025, period: "下半年", scheduledDate: "2025-09-04",
+    dept: "全廠", scope: "MP-01,MP-02,MP-03,MP-04,MP-05,MP-06",
+    auditor: "蔡有為", auditee: "程鼎智",
+    status: "已完成", actualDate: "2025-09-05", findings: 4, ncCount: 1 },
+  { id: "IA-2025-02", year: 2025, period: "上半年", scheduledDate: "2025-06-23",
+    dept: "品管課", scope: "MP-11,MP-13",
+    auditor: "蔡有為", auditee: "程鼎智",
+    status: "已完成", actualDate: "2025-06-23", findings: 1, ncCount: 1 },
+];
+
+// 環境監測：查無 6 工作環境管理程序/記錄/ 下的實際環境監測紀錄
+// 原假造的9筆（ENV-001~009）已移除，待實際量測後再填入
+const initialEnvRecords = [];
+
+const initialProdRecords = [
+  { lot:"LOT-20260301-A", customer:"TSMC", product:"Wafer Clean", input:1200, good:1180, defect:20, yieldRate:98.3, defectReasons:["particle","scratch"], operator:"Operator A", note:"first article checked" },
+  { lot:"LOT-20260302-B", customer:"VIS", product:"Final Clean", input:860, good:822, defect:38, yieldRate:95.6, defectReasons:["AOI NG","edge crack"], operator:"Operator B", note:"codes classified" },
+];
+
+const initialQualityRecords = [
+  { materialName:"IPA Cleaner", batchNo:"MAT-202603-01", quantity:"20L", spec:"PH 6.5-7.5 / density 0.78-0.80", inspQty:"3 bottles", ph:"7.0", density:"0.79", ri:"1.37", rotation:"0.0", result:"PASS", note:"within spec" },
+  { materialName:"Developer", batchNo:"MAT-202603-02", quantity:"10L", spec:"PH 10.5-11.0 / density 1.01-1.05", inspQty:"2 bottles", ph:"10.8", density:"1.03", ri:"1.42", rotation:"0.0", result:"PASS", note:"sample checked" },
+];
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+
+function loadStoredState(key, fallback) {
+  try {
+    if (typeof window === "undefined") return fallback;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return parsed ?? fallback;
+  } catch (err) {
+    console.warn("Failed to load " + key, err);
+    return fallback;
+  }
+}
+
+function saveStoredState(key, value) {
+  try {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    console.warn("Failed to save " + key, err);
+  }
+}
+
+async function apiJson(url, options = {}) {
+  const response = await fetch(url, options);
+  let payload = {};
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    payload = await response.json();
+  } else {
+    const bodyText = await response.text();
+    payload = bodyText ? { message: bodyText } : {};
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || payload.message || `Request failed (${response.status})`);
+  }
+  return payload;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function daysUntil(dateStr) {
+  if (!dateStr) return 9999;
+  const d = new Date(dateStr);
+  d.setHours(0, 0, 0, 0);
+  return Math.round((d - today) / 86400000);
+}
+
+function addDays(dateStr, days) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return "?";
+  const d = new Date(dateStr);
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+}
+
+const opsFieldLabels = {
+  scheduledDate: "預定日期",
+  dept: "部門",
+  scope: "稽核範圍",
+  auditor: "稽核員",
+  auditee: "受稽人",
+  date: "發生日",
+  description: "問題描述",
+  responsible: "責任人",
+  location: "地點",
+};
+
+function formatMissingFields(fields) {
+  return (fields || []).map(field => opsFieldLabels[field] || field).join("、");
+}
+
+function urgencyColor(days) {
+  if (days < 0) return "#ef4444";
+  if (days <= 14) return "#f97316";
+  if (days <= 30) return "#eab308";
+  return "#22c55e";
+}
+
+function urgencyLabel(days) {
+  if (days === 9999) return "無到期日";
+  if (days < 0) return `逾期 ${Math.abs(days)} 天`;
+  if (days === 0) return "今日到期";
+  return `剩 ${days} 天`;
+}
+
+function urgencyBg(days) {
+  if (days < 0) return "rgba(239,68,68,0.12)";
+  if (days <= 14) return "rgba(249,115,22,0.12)";
+  if (days <= 30) return "rgba(234,179,8,0.12)";
+  return "rgba(34,197,94,0.08)";
+}
+
+function buildCalendarLink(item) {
+  const start = String(item.date || "").replaceAll("-", "");
+  const end = String(addDays(item.date, 1) || "").replaceAll("-", "");
+  const details = [
+    item.module ? "模組: " + item.module : "",
+    item.summary ? "摘要: " + item.summary : "",
+    item.owner ? "負責人: " + item.owner : "",
+  ].filter(Boolean).join("\n");
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: item.title || "稽核提醒",
+    dates: start + "/" + end,
+    details,
+  });
+  return "https://calendar.google.com/calendar/render?" + params.toString();
+}
+
+function collectNotificationItems({ instruments, documents, equipment, suppliers, nonConformances, auditPlans }) {
+  const items = [];
+
+  instruments.forEach(inst => {
+    const date = addDays(inst.calibratedDate, inst.intervalDays);
+    const days = daysUntil(date);
+    if (!date || days > 30) return;
+    items.push({
+      key: "instrument-" + inst.id,
+      sourceType: "instrument",
+      priority: days < 0 ? "high" : days <= 14 ? "medium" : "low",
+      title: "儀器校正提醒：" + inst.name,
+      module: "MP-05 量測資源管理",
+      date,
+      summary: `${inst.id} 下次校正日 ${formatDate(date)}，${urgencyLabel(days)}`,
+      owner: inst.keeper || inst.location || "",
+      days,
+      statusText: urgencyLabel(days),
+    });
+  });
+
+  documents.forEach(doc => {
+    const date = addDays(doc.createdDate, 365);
+    const days = daysUntil(date);
+    if (!date || days > 45) return;
+    items.push({
+      key: "document-" + doc.id,
+      sourceType: "document",
+      priority: days < 0 ? "high" : "low",
+      title: "文件年度審查：" + doc.name,
+      module: "MP-01 文件化資訊管制",
+      date,
+      summary: `${doc.id} 建議年度審查日 ${formatDate(date)}，來源為建立日期加一年`,
+      owner: doc.author || doc.department || "",
+      days,
+      statusText: urgencyLabel(days),
+    });
+  });
+
+  equipment.forEach(eq => {
+    const date = addDays(eq.lastMaintenance, eq.intervalDays);
+    const days = daysUntil(date);
+    if (!date || days > 30) return;
+    items.push({
+      key: "equipment-" + eq.id,
+      sourceType: "equipment",
+      priority: days < 0 ? "high" : days <= 14 ? "medium" : "low",
+      title: "設備保養提醒：" + eq.name,
+      module: "MP-04 設施設備管理",
+      date,
+      summary: `${eq.id} 下次保養日 ${formatDate(date)}，${urgencyLabel(days)}`,
+      owner: eq.location || "",
+      days,
+      statusText: urgencyLabel(days),
+    });
+  });
+
+  suppliers.forEach(supplier => {
+    const date = addDays(supplier.lastEvalDate, supplier.evalIntervalDays);
+    const days = daysUntil(date);
+    if (!date || days > 30) return;
+    items.push({
+      key: "supplier-" + supplier.id,
+      sourceType: "supplier",
+      priority: days < 0 ? "high" : "low",
+      title: "供應商評鑑提醒：" + supplier.name,
+      module: "MP-10 採購及供應商管理",
+      date,
+      summary: `${supplier.id} 下次評鑑日 ${formatDate(date)}，目前評等 ${supplier.evalResult}`,
+      owner: supplier.contact || supplier.category || "",
+      days,
+      statusText: urgencyLabel(days),
+    });
+  });
+
+  nonConformances.forEach(nc => {
+    const days = daysUntil(nc.dueDate);
+    if (!nc.dueDate || nc.status === "已關閉" || days > 30) return;
+    items.push({
+      key: "nc-" + nc.id,
+      sourceType: "nc",
+      priority: days < 0 ? "high" : "medium",
+      title: "矯正措施追蹤：" + nc.id,
+      module: "MP-15 不符合及矯正措施",
+      date: nc.dueDate,
+      summary: `${nc.dept}，${nc.description}`,
+      owner: nc.responsible || "",
+      days,
+      statusText: urgencyLabel(days),
+    });
+  });
+
+  auditPlans.forEach(plan => {
+    const days = daysUntil(plan.scheduledDate);
+    if (!plan.scheduledDate || plan.status === "已完成" || days > 30) return;
+    items.push({
+      key: "audit-" + plan.id,
+      sourceType: "audit",
+      priority: days < 0 ? "high" : "medium",
+      title: "內部稽核提醒：" + plan.dept,
+      module: "MP-09 內部稽核管理",
+      date: plan.scheduledDate,
+      summary: `${plan.id} 稽核對象 ${plan.auditee}，稽核員 ${plan.auditor}`,
+      owner: plan.auditor || "",
+      days,
+      statusText: urgencyLabel(days),
+    });
+  });
+
+  return items.sort((a, b) => {
+    const left = new Date(a.date).getTime();
+    const right = new Date(b.date).getTime();
+    return left - right;
+  });
+}
+
+// ─── SHARED COMPONENTS ────────────────────────────────────────────────────────
+const uiTheme = {
+  panel: "linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(15,23,42,0.78) 100%)",
+  panelSoft: "rgba(255,255,255,0.035)",
+  panelBorder: "rgba(148,163,184,0.16)",
+  text: "#e2e8f0",
+  textMuted: "#94a3b8",
+  textSoft: "#64748b",
+  shadow: "0 24px 60px rgba(2, 6, 23, 0.28)",
+};
+
+function buttonStyle(variant = "secondary", disabled = false) {
+  const map = {
+    primary: {
+      background: "linear-gradient(135deg, #0284c7, #38bdf8)",
+      color: "#fff",
+      border: "none",
+      boxShadow: "0 10px 24px rgba(14,165,233,0.22)",
+    },
+    secondary: {
+      background: "rgba(255,255,255,0.045)",
+      color: "#dbeafe",
+      border: "1px solid rgba(148,163,184,0.18)",
+      boxShadow: "none",
+    },
+    success: {
+      background: "linear-gradient(135deg, #15803d, #22c55e)",
+      color: "#fff",
+      border: "none",
+      boxShadow: "0 10px 24px rgba(34,197,94,0.18)",
+    },
+    warning: {
+      background: "linear-gradient(135deg, #c2410c, #f97316)",
+      color: "#fff",
+      border: "none",
+      boxShadow: "0 10px 24px rgba(249,115,22,0.18)",
+    },
+    danger: {
+      background: "rgba(239,68,68,0.12)",
+      color: "#fecaca",
+      border: "1px solid rgba(239,68,68,0.24)",
+      boxShadow: "none",
+    },
+  };
+  return {
+    ...map[variant],
+    borderRadius: 12,
+    cursor: disabled ? "not-allowed" : "pointer",
+    padding: "10px 16px",
+    fontSize: 13,
+    fontWeight: 700,
+    opacity: disabled ? 0.6 : 1,
+    transition: "all 0.2s ease",
+  };
+}
+
+const tableShellStyle = {
+  overflowX: "auto",
+  background: "rgba(2, 6, 23, 0.16)",
+  border: "1px solid rgba(148,163,184,0.12)",
+  borderRadius: 16,
+};
+
+const tableHeadCellStyle = {
+  padding: "12px 10px",
+  borderBottom: "1px solid rgba(148,163,184,0.14)",
+  color: "#94a3b8",
+  fontSize: 12,
+  fontWeight: 700,
+  textAlign: "left",
+  letterSpacing: 0.2,
+};
+
+const tableRowCellStyle = {
+  padding: "9px 10px",
+  borderBottom: "1px solid rgba(148,163,184,0.08)",
+};
+
+function PageIntro({ eyebrow, title, description, actions, children }) {
+  return (
+    <div style={{
+      background: "linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.72) 100%)",
+      border: "1px solid rgba(148,163,184,0.16)",
+      borderRadius: 20,
+      padding: 24,
+      marginBottom: 20,
+      boxShadow: uiTheme.shadow,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ minWidth: 280, flex: 1 }}>
+          {eyebrow && <div style={{ fontSize: 11, letterSpacing: 1.4, textTransform: "uppercase", color: "#7dd3fc", fontWeight: 800, marginBottom: 10 }}>{eyebrow}</div>}
+          <div style={{ fontSize: 28, lineHeight: 1.1, fontWeight: 800, color: uiTheme.text }}>{title}</div>
+          {description && <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.8, color: uiTheme.textMuted, maxWidth: 760 }}>{description}</div>}
+        </div>
+        {actions && <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>{actions}</div>}
+      </div>
+      {children && <div style={{ marginTop: 18 }}>{children}</div>}
+    </div>
+  );
+}
+
+function Panel({ title, description, actions, accent = "#60a5fa", children, style = {} }) {
+  return (
+    <div style={{
+      background: uiTheme.panel,
+      border: `1px solid ${accent}28`,
+      borderRadius: 18,
+      padding: 20,
+      boxShadow: uiTheme.shadow,
+      ...style,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 14 }}>
+        <div style={{ minWidth: 220, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+            <div style={{ width: 10, height: 10, borderRadius: 999, background: accent, boxShadow: `0 0 0 6px ${accent}18` }} />
+            <div style={{ fontSize: 16, fontWeight: 800, color: uiTheme.text }}>{title}</div>
+          </div>
+          {description && <div style={{ fontSize: 12, color: uiTheme.textMuted, lineHeight: 1.7 }}>{description}</div>}
+        </div>
+        {actions && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Badge({ color, children }) {
+  return (
+    <span style={{
+      display: "inline-block",
+      padding: "4px 10px",
+      borderRadius: 99,
+      background: color + "18",
+      color,
+      fontSize: 12,
+      fontWeight: 700,
+      border: `1px solid ${color}38`,
+      letterSpacing: 0.3,
+    }}>{children}</span>
+  );
+}
+
+function StatCard({ label, value, color, sub }) {
+  return (
+    <div style={{
+      background: uiTheme.panel,
+      border: "1px solid " + uiTheme.panelBorder,
+      borderRadius: 18,
+      padding: "22px 24px",
+      flex: 1,
+      minWidth: 150,
+      borderTop: `3px solid ${color}`,
+      boxShadow: uiTheme.shadow,
+    }}>
+      <div style={{ fontSize: 32, fontWeight: 800, color, fontFamily: "'DM Mono', monospace", lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 13, color: uiTheme.textMuted, marginTop: 8, fontWeight: 700 }}>{label}</div>
+      {sub && <div style={{ fontSize: 11, color: uiTheme.textSoft, marginTop: 6, lineHeight: 1.6 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function SectionHeader({ title, count, color = "#60a5fa" }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+      <div style={{ width: 5, height: 22, background: color, borderRadius: 3 }} />
+      <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: uiTheme.text }}>{title}</h2>
+      {count !== undefined && (
+        <span style={{ background: color + "18", color, borderRadius: 99, padding: "3px 10px", fontSize: 12, fontWeight: 700, border: `1px solid ${color}33` }}>{count}</span>
+      )}
+    </div>
+  );
+}
+
+function Modal({ title, onClose, children }) {
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+    }} onClick={onClose}>
+      <div style={{
+        background: "#162033", borderRadius: 20, padding: 32, maxWidth: 700, width: "100%",
+        maxHeight: "85vh", overflow: "auto", border: "1px solid rgba(148,163,184,0.18)",
+        boxShadow: "0 32px 80px rgba(0,0,0,0.6)",
+      }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+          <h3 style={{ margin: 0, fontSize: 18, color: uiTheme.text, fontWeight: 800 }}>{title}</h3>
+          <button onClick={onClose} style={{
+            background: "rgba(255,255,255,0.08)", border: "1px solid rgba(148,163,184,0.14)", borderRadius: 10,
+            color: uiTheme.textMuted, cursor: "pointer", padding: "8px 14px", fontSize: 13, fontWeight: 700,
+          }}>✕ 關閉</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const inputStyle = {
+  background: "rgba(255,255,255,0.05)",
+  border: "1px solid rgba(148,163,184,0.18)",
+  borderRadius: 12,
+  padding: "10px 12px",
+  color: "#e2e8f0",
+  fontSize: 14,
+  width: "100%",
+  boxSizing: "border-box",
+  outline: "none",
+};
+
+// ─── CALIBRATION TAB ─────────────────────────────────────────────────────────
+function CalibrationTab({ instruments, setInstruments }) {
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState({});
+  const enriched = instruments.map(i => {
+    const nextDate = i.status === "免校正" ? null : addDays(i.calibratedDate, i.intervalDays);
+    const days = nextDate ? daysUntil(nextDate) : 9999;
+    return { ...i, nextDate, days };
+  }).sort((a, b) => a.days - b.days);
+  function handleUpdate() {
+    setInstruments(prev => prev.map(i => i.id === modal.id ? { ...i, calibratedDate: form.date, status: "合格" } : i));
+    setModal(null);
+  }
+  return (
+    <div>
+      <SectionHeader title="量規儀器校正追蹤" count={enriched.length} color="#60a5fa" />
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <StatCard label="逾期" value={enriched.filter(i => i.days < 0).length} color="#ef4444" />
+        <StatCard label="14天內到期" value={enriched.filter(i => i.days >= 0 && i.days <= 14).length} color="#f97316" />
+        <StatCard label="正常" value={enriched.filter(i => i.days > 30).length} color="#22c55e" />
+        <StatCard label="免校正" value={enriched.filter(i => i.status === "免校正").length} color="#6366f1" />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {enriched.map(inst => inst.status === "免校正" ? (
+          <div key={inst.id} style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontWeight: 700, color: "#c7d2fe", fontSize: 14 }}>{inst.name}</div>
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{inst.id} · {inst.location}</div>
+            </div>
+            <Badge color="#6366f1">免校正</Badge>
+          </div>
+        ) : (
+          <div key={inst.id} style={{ background: urgencyBg(inst.days), border: `1px solid ${urgencyColor(inst.days)}33`, borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{inst.name}</div>
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{inst.id} · {inst.location} · {inst.type}{inst.needsMSA && <span style={{ marginLeft: 8, color: "#818cf8", fontWeight: 700 }}>需 MSA</span>}</div>
+            </div>
+            <div style={{ textAlign: "right", minWidth: 120 }}>
+              <div style={{ fontSize: 12, color: "#64748b" }}>下次校正</div>
+              <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{formatDate(inst.nextDate)}</div>
+            </div>
+            <Badge color={urgencyColor(inst.days)}>{urgencyLabel(inst.days)}</Badge>
+            <button onClick={() => { setModal(inst); setForm({ date: new Date().toISOString().split("T")[0] }); }} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, color: "#94a3b8", cursor: "pointer", padding: "6px 14px", fontSize: 12, fontWeight: 600 }}>更新校正</button>
+          </div>
+        ))}
+      </div>
+      {modal && (
+        <Modal title={`更新校正記錄：${modal.name}`} onClose={() => setModal(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>儀器編號</div><div style={{ color: "#e2e8f0", fontWeight: 600 }}>{modal.id}</div></div>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>本次校正日期</div><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inputStyle} /></div>
+            <div style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 8, padding: 12 }}>
+              <div style={{ fontSize: 12, color: "#4ade80", fontWeight: 600 }}>更新後，下次校正日期將為：</div>
+              <div style={{ color: "#86efac", fontWeight: 700, fontSize: 16, marginTop: 4 }}>{formatDate(addDays(form.date || modal.calibratedDate, modal.intervalDays))}</div>
+            </div>
+            <button onClick={handleUpdate} style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", padding: "12px 24px", fontSize: 15, fontWeight: 700 }}>✓ 確認更新校正記錄</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── DOCUMENTS TAB ───────────────────────────────────────────────────────────
+function DocumentsTab({ documents, setDocuments }) {
+  const [modal, setModal]       = useState(null);
+  const [mode, setMode]         = useState(null);   // null | "single" | "bulk"
+  const [err, setErr]           = useState("");
+  const [dragOver, setDragOver] = useState(false);
+
+  // ── Single-add state ──────────────────────────────────────────────────────
+  const emptyDoc = { id:"", name:"", type:"管理程序", version:"1.0", department:"", createdDate:"", author:"", retentionYears:16, fileName:"", fileSize:"", fileType:"", fileData:"" };
+  const [newDoc, setNewDoc] = useState({ ...emptyDoc });
+
+  // ── Bulk-upload state ─────────────────────────────────────────────────────
+  const [bulkItems, setBulkItems] = useState([]);   // array of draft doc objects
+  const [bulkDone,  setBulkDone]  = useState(false);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const enriched = documents.map(d => {
+    const expiryDate = new Date(d.createdDate);
+    expiryDate.setFullYear(expiryDate.getFullYear() + (d.retentionYears || 16));
+    const expiryStr = expiryDate.toISOString().split("T")[0];
+    return { ...d, expiryStr, daysToExpiry: daysUntil(expiryStr) };
+  });
+
+  function parseDocxMeta(ab) {
+    try {
+      const raw = new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(ab));
+      const g = re => (raw.match(re)||[])[1]||"";
+      return {
+        title:    g(/<dc:title[^>]*>([^<]*)<\/dc:title>/),
+        creator:  g(/<dc:creator[^>]*>([^<]*)<\/dc:creator>/) || g(/<cp:lastModifiedBy[^>]*>([^<]*)<\/cp:lastModifiedBy>/),
+        revision: g(/<cp:revision[^>]*>([^<]*)<\/cp:revision>/),
+        created:  g(/<dcterms:created[^>]*>([^<]*)<\/dcterms:created>/),
+        modified: g(/<dcterms:modified[^>]*>([^<]*)<\/dcterms:modified>/),
+      };
+    } catch(e) { return {}; }
+  }
+  function parsePdfMeta(ab) {
+    try {
+      const raw = new TextDecoder("latin1", { fatal: false }).decode(new Uint8Array(ab));
+      const g = re => (raw.match(re)||[])[1]||"";
+      const d = g(/\/CreationDate\s*\(D:(\d{8})/);
+      return { title: g(/\/Title\s*\(([^)]+)\)/), author: g(/\/Author\s*\(([^)]+)\)/),
+               date: d.length===8 ? `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}` : "" };
+    } catch(e) { return {}; }
+  }
+
+  // Process one File object → return a draft doc object (with fileData)
+  function processFile(file) {
+    return new Promise(resolve => {
+      const ext     = file.name.split(".").pop().toLowerCase();
+      const sizeStr = file.size > 1048576 ? (file.size/1048576).toFixed(1)+" MB" : (file.size/1024).toFixed(0)+" KB";
+      const baseName = file.name.replace(/\.[^.]+$/, "");
+      const draft = {
+        id: "", name: baseName, type: "管理程序", version: "1.0",
+        department: "", createdDate: "", author: "",
+        retentionYears: 16, fileName: file.name, fileSize: sizeStr,
+        fileType: ext.toUpperCase(), fileData: "", _status: "pending"
+      };
+      // Read as ArrayBuffer for metadata, then as DataURL for storage
+      const arrReader = new FileReader();
+      arrReader.onload = ev => {
+        const ab = ev.target.result;
+        // Extract metadata
+        if (["docx","xlsx","pptx"].includes(ext)) {
+          const m = parseDocxMeta(ab);
+          if (m.title)    draft.name        = m.title;
+          if (m.creator)  draft.author      = m.creator;
+          if (m.revision) draft.version     = parseInt(m.revision)>0 ? `1.${parseInt(m.revision)-1}` : "1.0";
+          if (m.created||m.modified) draft.createdDate = (m.created||m.modified).substring(0,10);
+        } else if (ext === "pdf") {
+          const m = parsePdfMeta(ab);
+          if (m.title)  draft.name        = m.title  || draft.name;
+          if (m.author) draft.author      = m.author;
+          if (m.date)   draft.createdDate = m.date;
+        }
+        // Now read as DataURL
+        const b64r = new FileReader();
+        b64r.onload = e2 => { draft.fileData = e2.target.result; resolve(draft); };
+        b64r.readAsDataURL(file);
+      };
+      arrReader.readAsArrayBuffer(file);
+    });
+  }
+
+  // ── Single upload handler ─────────────────────────────────────────────────
+  async function handleSingleFileUpload(e) {
+    const file = e.target.files[0]; if (!file) return;
+    const draft = await processFile(file);
+    setNewDoc(prev => ({ ...prev, ...draft }));
+  }
+  function handleSingleAdd() {
+    if (!newDoc.id.trim()||!newDoc.name.trim()||!newDoc.department.trim()||!newDoc.createdDate) {
+      setErr("請填寫所有必填欄位：文件編號、名稱、制定部門、制定日期"); return;
+    }
+    setErr("");
+    setDocuments(prev => [...prev, { ...newDoc, retentionYears: parseInt(newDoc.retentionYears)||16 }]);
+    setMode(null); setNewDoc({ ...emptyDoc });
+  }
+
+  // ── Bulk upload handlers ──────────────────────────────────────────────────
+  async function handleBulkFiles(files) {
+    if (!files || files.length === 0) return;
+    setBulkDone(false);
+    const drafts = await Promise.all(Array.from(files).map(processFile));
+    setBulkItems(prev => [...prev, ...drafts]);
+  }
+  function updateBulkItem(idx, field, value) {
+    setBulkItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
+  }
+  function removeBulkItem(idx) {
+    setBulkItems(prev => prev.filter((_, i) => i !== idx));
+  }
+  function confirmBulkUpload() {
+    const valid = bulkItems.filter(d => d.id.trim() && d.name.trim() && d.department.trim() && d.createdDate);
+    const invalid = bulkItems.length - valid.length;
+    if (invalid > 0) { setErr(`尚有 ${invalid} 筆資料未填完整（需：編號、名稱、部門、日期）`); return; }
+    setErr("");
+    setDocuments(prev => [...prev, ...valid.map(d => ({ ...d, retentionYears: parseInt(d.retentionYears)||16, _status: undefined }))]);
+    setBulkItems([]); setBulkDone(true);
+    setTimeout(() => { setMode(null); setBulkDone(false); }, 1500);
+  }
+  function closeModal() { setMode(null); setNewDoc({ ...emptyDoc }); setBulkItems([]); setErr(""); setBulkDone(false); }
+
+  // ── Shared styles ─────────────────────────────────────────────────────────
+  const dropZoneStyle = over => ({
+    display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+    gap:10, background: over?"rgba(124,58,237,0.12)":"rgba(255,255,255,0.03)",
+    border:`2px dashed ${over?"rgba(124,58,237,0.9)":"rgba(124,58,237,0.4)"}`,
+    borderRadius:14, padding:"28px 20px", cursor:"pointer", transition:"all 0.2s", textAlign:"center"
+  });
+
+  return (
+    <div>
+      <SectionHeader title="文件版本管控" count={documents.length} color="#a78bfa" />
+      <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap" }}>
+        <StatCard label="管理手冊"  value={documents.filter(d=>d.type==="管理手冊").length}  color="#a78bfa" />
+        <StatCard label="管理程序"  value={documents.filter(d=>d.type==="管理程序").length}  color="#60a5fa" />
+        <StatCard label="作業指導書" value={documents.filter(d=>d.type==="作業指導書").length} color="#34d399" />
+        <StatCard label="總文件數"  value={documents.length} color="#f97316" />
+      </div>
+
+      {/* Action buttons */}
+      <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginBottom:14 }}>
+        <button onClick={() => { setMode("bulk"); setErr(""); }} style={{ background:"linear-gradient(135deg,#0891b2,#06b6d4)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"9px 18px", fontSize:13, fontWeight:700 }}>
+          &#128229; 批量上傳
+        </button>
+        <button onClick={() => { setMode("single"); setErr(""); }} style={{ background:"linear-gradient(135deg,#7c3aed,#4f46e5)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"9px 18px", fontSize:13, fontWeight:700 }}>
+          ＋ 新增文件
+        </button>
+      </div>
+
+      {/* Document table */}
+      <div style={{ overflowX:"auto" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead><tr>{["文件編號","文件名稱","類別","版本","制定部門","制定日期","制定者","保存至","檔案",""].map(h=>(
+            <th key={h} style={{ textAlign:"left", padding:"10px 12px", color:"#64748b", fontWeight:600, borderBottom:"1px solid rgba(255,255,255,0.06)", whiteSpace:"nowrap" }}>{h}</th>
+          ))}</tr></thead>
+          <tbody>
+            {enriched.map((doc, i) => (
+              <tr key={doc.id} style={{ background: i%2===0?"rgba(255,255,255,0.02)":"transparent" }}>
+                <td style={{ padding:"10px 12px", color:"#60a5fa", fontWeight:700, fontFamily:"monospace" }}>{doc.id}</td>
+                <td style={{ padding:"10px 12px", color:"#e2e8f0", fontWeight:600 }}>{doc.name}</td>
+                <td style={{ padding:"10px 12px" }}><Badge color={doc.type==="管理手冊"?"#a78bfa":"#60a5fa"}>{doc.type}</Badge></td>
+                <td style={{ padding:"10px 12px" }}><span style={{ background:"rgba(34,197,94,0.1)", color:"#4ade80", borderRadius:6, padding:"2px 8px", fontWeight:700, fontFamily:"monospace" }}>v{doc.version}</span></td>
+                <td style={{ padding:"10px 12px", color:"#94a3b8" }}>{doc.department}</td>
+                <td style={{ padding:"10px 12px", color:"#94a3b8", whiteSpace:"nowrap" }}>{formatDate(doc.createdDate)}</td>
+                <td style={{ padding:"10px 12px", color:"#94a3b8" }}>{doc.author}</td>
+                <td style={{ padding:"10px 12px", whiteSpace:"nowrap" }}><span style={{ color:doc.daysToExpiry<365?"#f97316":"#64748b", fontFamily:"monospace", fontSize:12 }}>{formatDate(doc.expiryStr)}</span></td>
+                <td style={{ padding:"10px 12px" }}>
+                  {doc.pdfPath ? (<a href={encodeURI(doc.pdfPath)} target="_blank" rel="noopener noreferrer" style={{ color:"#fca5a5", fontSize:11, textDecoration:"none", background:"rgba(239,68,68,0.1)", borderRadius:6, padding:"3px 8px", border:"1px solid rgba(239,68,68,0.3)", marginRight:4 }}>&#128196; PDF</a>) : null}
+                  {doc.fileData ? (<a href={doc.fileData} download={doc.fileName||doc.id} style={{ color:"#60a5fa", fontSize:11, textDecoration:"none", background:"rgba(96,165,250,0.1)", borderRadius:6, padding:"3px 8px", border:"1px solid rgba(96,165,250,0.3)" }}>&#8595; {doc.fileType||"下載"}</a>) : null}
+                  {!doc.pdfPath && !doc.fileData && <span style={{ color:"#374151", fontSize:11 }}>無檔案</span>}
+                </td>
+                <td style={{ padding:"10px 12px" }}><button onClick={() => setModal(doc)} style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:6, color:"#94a3b8", cursor:"pointer", padding:"4px 10px", fontSize:11 }}>詳情</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Detail modal */}
+      {modal && (
+        <Modal title={`文件詳情：${modal.id}`} onClose={() => setModal(null)}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
+            {[["文件編號",modal.id],["文件名稱",modal.name],["類別",modal.type],["版本",`v${modal.version}`],["制定部門",modal.department],["制定日期",formatDate(modal.createdDate)],["制定者",modal.author],["保存年限",`${modal.retentionYears} 年`],["保存到期日",formatDate(modal.expiryStr)],["距到期",`${modal.daysToExpiry} 天`]].map(([k,v]) => (
+              <div key={k}><div style={{ fontSize:11, color:"#64748b", marginBottom:4 }}>{k}</div><div style={{ color:"#e2e8f0", fontWeight:600, fontSize:14 }}>{v}</div></div>
+            ))}
+          </div>
+          {modal.pdfPath && (
+            <div style={{ background:"rgba(239,68,68,0.07)", border:"1px solid rgba(239,68,68,0.25)", borderRadius:10, padding:14, display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+              <div>
+                <div style={{ fontSize:12, color:"#fca5a5", fontWeight:700, marginBottom:3 }}>&#128196; PDF 原始檔案</div>
+                <div style={{ fontSize:11, color:"#64748b" }}>{modal.pdfPath.split("/").pop()}</div>
+              </div>
+              <a href={encodeURI(modal.pdfPath)} target="_blank" rel="noopener noreferrer" style={{ background:"linear-gradient(135deg,#dc2626,#ef4444)", color:"#fff", padding:"8px 18px", borderRadius:8, fontSize:13, fontWeight:700, textDecoration:"none", whiteSpace:"nowrap" }}>&#128065; 開啟 PDF</a>
+            </div>
+          )}
+          {modal.fileName && (
+            <div style={{ background:"rgba(96,165,250,0.07)", border:"1px solid rgba(96,165,250,0.2)", borderRadius:10, padding:14, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <div>
+                <div style={{ fontSize:13, color:"#93c5fd", fontWeight:700 }}>{modal.fileName}</div>
+                <div style={{ fontSize:11, color:"#64748b", marginTop:4 }}>{modal.fileType} • {modal.fileSize}</div>
+              </div>
+              {modal.fileData && <a href={modal.fileData} download={modal.fileName} style={{ background:"linear-gradient(135deg,#7c3aed,#4f46e5)", color:"#fff", padding:"8px 18px", borderRadius:8, fontSize:13, fontWeight:700, textDecoration:"none" }}>&#8595; 下載檔案</a>}
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* ── SINGLE ADD MODAL ─────────────────────────────────────────────────── */}
+      {mode === "single" && (
+        <Modal title="新增文件" onClose={closeModal}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <div>
+              <div style={{ fontSize:12, color:"#64748b", marginBottom:6, fontWeight:600 }}>上傳文件（可自動讀取 Word / PDF Metadata）</div>
+              <label style={{ display:"flex", alignItems:"center", gap:12, background:"rgba(255,255,255,0.03)", border:"2px dashed rgba(124,58,237,0.4)", borderRadius:12, padding:"14px 18px", cursor:"pointer" }}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(124,58,237,0.8)"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(124,58,237,0.4)"}>
+                <input type="file" accept=".pdf,.docx,.xlsx,.pptx,.doc,.txt" onChange={handleSingleFileUpload} style={{ display:"none" }} />
+                <span style={{ fontSize:28 }}>&#128196;</span>
+                <div>
+                  {newDoc.fileName
+                    ? <><div style={{ color:"#a78bfa", fontWeight:700 }}>{newDoc.fileName}</div><div style={{ color:"#64748b", fontSize:12 }}>{newDoc.fileType} • {newDoc.fileSize}</div></>
+                    : <><div style={{ color:"#94a3b8", fontWeight:600 }}>點擊選擇單一檔案</div><div style={{ color:"#475569", fontSize:12, marginTop:3 }}>PDF、DOCX、XLSX…</div></>
+                  }
+                </div>
+              </label>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              {[["文件編號 *","id","text"],["版本 *","version","text"],["制定部門 *","department","text"],["制定者","author","text"]].map(([label,field,type]) => (
+                <div key={field}>
+                  <div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>{label}</div>
+                  <input type={type} value={newDoc[field]} onChange={e=>setNewDoc({...newDoc,[field]:e.target.value})} style={inputStyle} placeholder={field==="id"?"MP-XX":""} />
+                </div>
+              ))}
+            </div>
+            <div>
+              <div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>文件名稱 *</div>
+              <input type="text" value={newDoc.name} onChange={e=>setNewDoc({...newDoc,name:e.target.value})} style={inputStyle} />
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+              <div>
+                <div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>制定日期 *</div>
+                <input type="date" value={newDoc.createdDate} onChange={e=>setNewDoc({...newDoc,createdDate:e.target.value})} style={inputStyle} />
+              </div>
+              <div>
+                <div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>保存年限（年）</div>
+                <input type="number" value={newDoc.retentionYears} onChange={e=>setNewDoc({...newDoc,retentionYears:e.target.value})} style={inputStyle} min="1" max="99" />
+              </div>
+              <div>
+                <div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>類別</div>
+                <select value={newDoc.type} onChange={e=>setNewDoc({...newDoc,type:e.target.value})} style={inputStyle}>
+                  <option>管理手冊</option><option>管理程序</option><option>作業指導書</option><option>表單</option>
+                </select>
+              </div>
+            </div>
+            {err && <div style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, padding:"10px 14px", color:"#fca5a5", fontSize:13 }}>{err}</div>}
+            <button onClick={handleSingleAdd} style={{ background:"linear-gradient(135deg,#7c3aed,#4f46e5)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"13px 24px", fontSize:15, fontWeight:700 }}>＋ 確認新增文件</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── BULK UPLOAD MODAL ────────────────────────────────────────────────── */}
+      {mode === "bulk" && (
+        <Modal title={`批量上傳文件（已選 ${bulkItems.length} 筆）`} onClose={closeModal}>
+          <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+
+            {/* Drop zone */}
+            <div
+              style={dropZoneStyle(dragOver)}
+              onDragOver={e=>{ e.preventDefault(); setDragOver(true); }}
+              onDragLeave={()=>setDragOver(false)}
+              onDrop={e=>{ e.preventDefault(); setDragOver(false); handleBulkFiles(e.dataTransfer.files); }}
+            >
+              <span style={{ fontSize:40 }}>&#128229;</span>
+              <div style={{ color:"#a78bfa", fontWeight:700, fontSize:15 }}>拖曳多個檔案到此處</div>
+              <div style={{ color:"#64748b", fontSize:12 }}>支援 PDF、DOCX、XLSX、PPTX、TXT，自動解析 Metadata</div>
+              <label style={{ marginTop:6, background:"rgba(124,58,237,0.15)", border:"1px solid rgba(124,58,237,0.5)", borderRadius:8, color:"#a78bfa", cursor:"pointer", padding:"8px 20px", fontSize:13, fontWeight:700 }}>
+                <input type="file" multiple accept=".pdf,.docx,.xlsx,.pptx,.doc,.txt" onChange={e=>handleBulkFiles(e.target.files)} style={{ display:"none" }} />
+                或點擊選擇檔案
+              </label>
+            </div>
+
+            {/* Item list */}
+            {bulkItems.length > 0 && (
+              <div style={{ display:"flex", flexDirection:"column", gap:10, maxHeight:420, overflowY:"auto", paddingRight:4 }}>
+                {/* Header row */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 0.8fr 0.7fr 0.7fr 28px", gap:6, fontSize:11, color:"#64748b", fontWeight:600, padding:"0 2px" }}>
+                  <span>文件編號 *</span><span>名稱 *</span><span>部門 *</span><span>日期 *</span><span>版本 / 類別</span><span></span>
+                </div>
+                {bulkItems.map((item, idx) => (
+                  <div key={idx} style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:10, padding:"10px 12px" }}>
+                    {/* File info row */}
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <span style={{ fontSize:16 }}>&#128196;</span>
+                        <span style={{ fontSize:12, color:"#a78bfa", fontWeight:600 }}>{item.fileName}</span>
+                        <span style={{ fontSize:11, color:"#475569" }}>{item.fileSize} • {item.fileType}</span>
+                      </div>
+                      <button onClick={()=>removeBulkItem(idx)} style={{ background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:6, color:"#fca5a5", cursor:"pointer", padding:"2px 8px", fontSize:12 }}>✕</button>
+                    </div>
+                    {/* Editable fields */}
+                    <div style={{ display:"grid", gridTemplateColumns:"0.8fr 1.5fr 0.9fr 0.85fr 0.6fr 0.6fr", gap:6 }}>
+                      <input value={item.id} onChange={e=>updateBulkItem(idx,"id",e.target.value)} placeholder="編號 *" style={{ ...inputStyle, fontSize:12, padding:"6px 8px" }} />
+                      <input value={item.name} onChange={e=>updateBulkItem(idx,"name",e.target.value)} placeholder="名稱 *" style={{ ...inputStyle, fontSize:12, padding:"6px 8px" }} />
+                      <input value={item.department} onChange={e=>updateBulkItem(idx,"department",e.target.value)} placeholder="部門 *" style={{ ...inputStyle, fontSize:12, padding:"6px 8px" }} />
+                      <input type="date" value={item.createdDate} onChange={e=>updateBulkItem(idx,"createdDate",e.target.value)} style={{ ...inputStyle, fontSize:12, padding:"6px 8px" }} />
+                      <input value={item.version} onChange={e=>updateBulkItem(idx,"version",e.target.value)} placeholder="版本" style={{ ...inputStyle, fontSize:12, padding:"6px 8px" }} />
+                      <select value={item.type} onChange={e=>updateBulkItem(idx,"type",e.target.value)} style={{ ...inputStyle, fontSize:11, padding:"6px 4px" }}>
+                        <option>管理手冊</option><option>管理程序</option><option>作業指導書</option><option>表單</option>
+                      </select>
+                    </div>
+                    {/* Author & retention (collapsed row) */}
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginTop:6 }}>
+                      <input value={item.author} onChange={e=>updateBulkItem(idx,"author",e.target.value)} placeholder="制定者" style={{ ...inputStyle, fontSize:12, padding:"6px 8px" }} />
+                      <input type="number" value={item.retentionYears} onChange={e=>updateBulkItem(idx,"retentionYears",e.target.value)} placeholder="保存年限" style={{ ...inputStyle, fontSize:12, padding:"6px 8px" }} min="1" max="99" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {bulkItems.length === 0 && (
+              <div style={{ textAlign:"center", color:"#475569", fontSize:13, padding:"10px 0" }}>尚未選擇任何檔案</div>
+            )}
+
+            {err && <div style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, padding:"10px 14px", color:"#fca5a5", fontSize:13 }}>{err}</div>}
+            {bulkDone && <div style={{ background:"rgba(34,197,94,0.1)", border:"1px solid rgba(34,197,94,0.3)", borderRadius:8, padding:"10px 14px", color:"#86efac", fontSize:13 }}>✓ 已成功匯入 {bulkItems.length} 筆文件！</div>}
+
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={closeModal} style={{ flex:1, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#94a3b8", cursor:"pointer", padding:"12px 0", fontSize:14, fontWeight:600 }}>取消</button>
+              <button onClick={confirmBulkUpload} disabled={bulkItems.length===0} style={{ flex:2, background: bulkItems.length===0?"rgba(124,58,237,0.3)":"linear-gradient(135deg,#0891b2,#06b6d4)", border:"none", borderRadius:10, color:"#fff", cursor: bulkItems.length===0?"not-allowed":"pointer", padding:"12px 0", fontSize:15, fontWeight:700 }}>
+                &#128229; 確認匯入全部 {bulkItems.length} 筆文件
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── TRAINING TAB ─────────────────────────────────────────────────────────────
+function TrainingTab({ training, setTraining }) {
+  const [selected, setSelected] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newRecord, setNewRecord] = useState({ course: "", date: "", type: "內訓", result: "合格", cert: "無" });
+  function addTraining() {
+    setTraining(prev => prev.map(emp => emp.id === selected.id ? { ...emp, trainings: [...emp.trainings, { ...newRecord }] } : emp));
+    setSelected(prev => ({ ...prev, trainings: [...prev.trainings, { ...newRecord }] }));
+    setShowAdd(false);
+    setNewRecord({ course: "", date: "", type: "內訓", result: "合格", cert: "無" });
+  }
+  return (
+    <div>
+      <SectionHeader title="人員訓練記錄" count={training.length} color="#34d399" />
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <StatCard label="員工人數" value={training.length} color="#34d399" />
+        <StatCard label="訓練總筆數" value={training.reduce((s,e) => s+e.trainings.length,0)} color="#60a5fa" />
+        <StatCard label="外訓筆數" value={training.reduce((s,e) => s+e.trainings.filter(t=>t.type==="外訓").length,0)} color="#a78bfa" />
+        <StatCard label="有證書筆數" value={training.reduce((s,e) => s+e.trainings.filter(t=>t.cert==="有").length,0)} color="#f472b6" />
+      </div>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ flex: "0 0 260px", display: "flex", flexDirection: "column", gap: 8 }}>
+          {training.map(emp => {
+            const hireMonths = Math.floor((today - new Date(emp.hireDate)) / (30*86400000));
+            const isNew = hireMonths < 3;
+            return (<div key={emp.id} onClick={() => setSelected(emp)} style={{ background: selected?.id===emp.id?"rgba(52,211,153,0.15)":"rgba(255,255,255,0.04)", border: `1px solid ${selected?.id===emp.id?"rgba(52,211,153,0.4)":"rgba(255,255,255,0.08)"}`, borderRadius: 12, padding: "14px 16px", cursor: "pointer" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{emp.name}</div><div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{emp.dept} · {emp.role}</div></div><div style={{ textAlign: "right" }}>{isNew&&<Badge color="#f97316">新進</Badge>}<div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{emp.trainings.length} 筆訓練</div></div></div></div>);
+          })}
+        </div>
+        <div style={{ flex: 1, minWidth: 280 }}>
+          {selected ? (
+            <div>
+              <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: 16, border: "1px solid rgba(255,255,255,0.08)", marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0" }}>{selected.name}</div>
+                    <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>{selected.id} · {selected.dept} · {selected.role}</div>
+                    <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>到職日：{formatDate(selected.hireDate)}</div>
+                  </div>
+                  <button onClick={() => setShowAdd(true)} style={{ background: "linear-gradient(135deg, #059669, #10b981)", border: "none", borderRadius: 8, color: "#fff", cursor: "pointer", padding: "7px 14px", fontSize: 12, fontWeight: 700 }}>＋ 新增訓練</button>
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {selected.trainings.map((t,i) => (<div key={i} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, padding: "12px 16px", display: "flex", gap: 16, alignItems: "center" }}><div style={{ flex: 1 }}><div style={{ fontWeight: 600, color: "#e2e8f0", fontSize: 13 }}>{t.course}</div><div style={{ fontSize: 11, color: "#64748b", marginTop: 3 }}>{formatDate(t.date)} · {t.type}</div></div><Badge color={t.result==="合格"?"#22c55e":"#ef4444"}>{t.result}</Badge>{t.cert==="有"&&<Badge color="#a78bfa">有證書</Badge>}</div>))}
+              </div>
+            </div>
+          ) : (<div style={{ textAlign: "center", padding: "60px 20px", color: "#475569" }}>← 點選左側員工以查看訓練記錄</div>)}
+        </div>
+      </div>
+      {showAdd && selected && (<Modal title={`新增訓練記錄：${selected.name}`} onClose={() => setShowAdd(false)}><div style={{ display: "flex", flexDirection: "column", gap: 12 }}><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>課程名稱</div><input value={newRecord.course} onChange={e => setNewRecord({...newRecord,course:e.target.value})} style={inputStyle} /></div><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>訓練日期</div><input type="date" value={newRecord.date} onChange={e => setNewRecord({...newRecord,date:e.target.value})} style={inputStyle} /></div><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>訓練類型</div><select value={newRecord.type} onChange={e => setNewRecord({...newRecord,type:e.target.value})} style={inputStyle}><option>內訓</option><option>外訓</option></select></div><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>評估結果</div><select value={newRecord.result} onChange={e => setNewRecord({...newRecord,result:e.target.value})} style={inputStyle}><option>合格</option><option>不合格</option><option>待評估</option></select></div><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>是否有結業證書</div><select value={newRecord.cert} onChange={e => setNewRecord({...newRecord,cert:e.target.value})} style={inputStyle}><option>無</option><option>有</option></select></div><button onClick={addTraining} style={{ background: "linear-gradient(135deg, #059669, #10b981)", border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", padding: "12px 24px", fontSize: 15, fontWeight: 700, marginTop: 8 }}>✓ 儲存訓練記錄</button></div></Modal>)}
+    </div>
+  );
+}
+
+// ─── EQUIPMENT TAB ────────────────────────────────────────────────────────────
+function EquipmentTab({ equipment, setEquipment }) {
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState({});
+  const enriched = equipment.map(eq => {
+    const nextDate = addDays(eq.lastMaintenance, eq.intervalDays);
+    const days = daysUntil(nextDate);
+    return { ...eq, nextDate, days };
+  }).sort((a,b) => a.days-b.days);
+  function handleUpdate() {
+    setEquipment(prev => prev.map(e => e.id===modal.id ? { ...e, lastMaintenance: form.date } : e));
+    setModal(null);
+  }
+  return (
+    <div>
+      <SectionHeader title="設備保養追蹤" count={equipment.length} color="#fb923c" />
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <StatCard label="逾期保養" value={enriched.filter(e=>e.days<0).length} color="#ef4444" />
+        <StatCard label="本月到期" value={enriched.filter(e=>e.days>=0&&e.days<=30).length} color="#f97316" />
+        <StatCard label="正常" value={enriched.filter(e=>e.days>30).length} color="#22c55e" />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {enriched.map(eq => (
+          <div key={eq.id} style={{ background: urgencyBg(eq.days), border: `1px solid ${urgencyColor(eq.days)}33`, borderRadius: 12, padding: "16px 18px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 10 }}>
+              <div style={{ flex: 1, minWidth: 200 }}><div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{eq.name}</div><div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{eq.id} · {eq.location} · 每 {eq.intervalDays} 天保養一次</div></div>
+              <div style={{ textAlign: "right", minWidth: 120 }}><div style={{ fontSize: 12, color: "#64748b" }}>下次保養</div><div style={{ fontWeight: 700, color: "#e2e8f0" }}>{formatDate(eq.nextDate)}</div></div>
+              <Badge color={urgencyColor(eq.days)}>{urgencyLabel(eq.days)}</Badge>
+              <button onClick={() => { setModal(eq); setForm({ date: new Date().toISOString().split("T")[0] }); }} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, color: "#94a3b8", cursor: "pointer", padding: "6px 14px", fontSize: 12 }}>記錄保養</button>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>保養項目：</span>
+              {eq.nextItems.map((item,i) => (<span key={i} style={{ fontSize: 11, background: "rgba(251,146,60,0.1)", color: "#fb923c", borderRadius: 6, padding: "2px 8px", border: "1px solid rgba(251,146,60,0.2)" }}>{item}</span>))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {modal && (<Modal title={`記錄保養完成：${modal.name}`} onClose={() => setModal(null)}><div style={{ display: "flex", flexDirection: "column", gap: 16 }}><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>保養完成日期</div><input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})} style={inputStyle} /></div><div style={{ background: "rgba(251,146,60,0.1)", borderRadius: 8, padding: 12 }}><div style={{ fontSize: 12, color: "#fb923c", fontWeight: 600, marginBottom: 8 }}>本次保養項目：</div>{modal.nextItems.map((item,i) => (<div key={i} style={{ color: "#fed7aa", fontSize: 13, marginBottom: 4 }}>☑ {item}</div>))}</div><button onClick={handleUpdate} style={{ background: "linear-gradient(135deg, #ea580c, #f97316)", border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", padding: "12px 24px", fontSize: 15, fontWeight: 700 }}>✓ 確認保養完成</button></div></Modal>)}
+    </div>
+  );
+}
+
+// ─── SUPPLIER TAB (MP-10) ────────────────────────────────────────────────────
+function SupplierTab({ suppliers, setSuppliers }) {
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState({});
+  const enriched = suppliers.map(s => {
+    const nextEvalDate = addDays(s.lastEvalDate, s.evalIntervalDays);
+    const days = daysUntil(nextEvalDate);
+    return { ...s, nextEvalDate, days };
+  }).sort((a,b) => a.days-b.days);
+  function handleUpdate() {
+    setSuppliers(prev => prev.map(s => s.id===modal.id ? { ...s, lastEvalDate: form.date, evalScore: parseInt(form.score), evalResult: parseInt(form.score)>=90?"優良":parseInt(form.score)>=80?"合格":parseInt(form.score)>=70?"條件合格":"不合格" } : s));
+    setModal(null);
+  }
+  const scoreColor = s => s>=90?"#22c55e":s>=80?"#60a5fa":s>=70?"#eab308":"#ef4444";
+  return (
+    <div>
+      <SectionHeader title="供應商評鑑管理（MP-10）" count={suppliers.length} color="#06b6d4" />
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <StatCard label="供應商總數" value={suppliers.length} color="#06b6d4" />
+        <StatCard label="優良" value={enriched.filter(s=>s.evalResult==="優良").length} color="#22c55e" />
+        <StatCard label="條件合格" value={enriched.filter(s=>s.evalResult==="條件合格").length} color="#eab308" />
+        <StatCard label="評鑑逾期" value={enriched.filter(s=>s.days<0).length} color="#ef4444" />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {enriched.map(s => (
+          <div key={s.id} style={{ background: urgencyBg(s.days), border: `1px solid ${urgencyColor(s.days)}33`, borderRadius: 12, padding: "16px 18px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: s.issues.length>0?10:0 }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{s.name}</div>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{s.id} · {s.category} · 聯絡人：{s.contact}</div>
+              </div>
+              <div style={{ textAlign: "right", minWidth: 90 }}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: scoreColor(s.evalScore), fontFamily: "monospace" }}>{s.evalScore}</div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>分</div>
+              </div>
+              <Badge color={s.evalResult==="優良"?"#22c55e":s.evalResult==="合格"?"#60a5fa":s.evalResult==="條件合格"?"#eab308":"#ef4444"}>{s.evalResult}</Badge>
+              <div style={{ textAlign: "right", minWidth: 120 }}>
+                <div style={{ fontSize: 12, color: "#64748b" }}>下次評鑑</div>
+                <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 13 }}>{formatDate(s.nextEvalDate)}</div>
+              </div>
+              <Badge color={urgencyColor(s.days)}>{urgencyLabel(s.days)}</Badge>
+              <button onClick={() => { setModal(s); setForm({ date: new Date().toISOString().split("T")[0], score: s.evalScore }); }} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, color: "#94a3b8", cursor: "pointer", padding: "6px 14px", fontSize: 12 }}>更新評鑑</button>
+            </div>
+            {s.issues.length>0 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11, color: "#ef4444", fontWeight: 600 }}>問題項目：</span>
+                {s.issues.map((issue,i) => (<span key={i} style={{ fontSize: 11, background: "rgba(239,68,68,0.1)", color: "#f87171", borderRadius: 6, padding: "2px 8px", border: "1px solid rgba(239,68,68,0.2)" }}>{issue}</span>))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {modal && (<Modal title={`更新評鑑：${modal.name}`} onClose={() => setModal(null)}><div style={{ display: "flex", flexDirection: "column", gap: 16 }}><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>評鑑日期</div><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})} style={inputStyle} /></div><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>評鑑總分 (0-100)</div><input type="number" min="0" max="100" value={form.score} onChange={e=>setForm({...form,score:e.target.value})} style={inputStyle} /></div><div style={{ background: "rgba(6,182,212,0.1)", borderRadius: 8, padding: 12 }}><div style={{ fontSize: 12, color: "#22d3ee", fontWeight: 600 }}>評定等級：{parseInt(form.score)>=90?"優良":parseInt(form.score)>=80?"合格":parseInt(form.score)>=70?"條件合格":"不合格"}</div><div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>90+優良 / 80-89合格 / 70-79條件合格 / 69以下不合格</div></div><button onClick={handleUpdate} style={{ background: "linear-gradient(135deg, #0891b2, #06b6d4)", border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", padding: "12px 24px", fontSize: 15, fontWeight: 700 }}>✓ 確認更新評鑑</button></div></Modal>)}
+    </div>
+  );
+}
+
+// ─── NON-CONFORMANCE TAB (MP-15) ─────────────────────────────────────────────
+function NonConformanceTab({ nonConformances: items, setNonConformances: setItems }) {
+  const emptyDraft = { id:"", date:"", dept:"", type:"製程異常", description:"", severity:"輕微", rootCause:"", correctiveAction:"", responsible:"", dueDate:"", status:"待處理", closeDate:"", effectiveness:"" };
+  const [modal, setModal] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [draft, setDraft] = useState(emptyDraft);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState("");
+  const [importDraft, setImportDraft] = useState(null);
+  const [importMissing, setImportMissing] = useState([]);
+
+  const statusColor = s => s==="已關閉"?"#22c55e":s==="處理中"?"#f97316":s==="待處理"?"#ef4444":"#eab308";
+  const sevColor = s => s==="重大"?"#ef4444":s==="中度"?"#eab308":"#60a5fa";
+  const enriched = items.map(item => ({ ...item, overdue: item.status !== "已關閉" && daysUntil(item.dueDate) < 0 }));
+
+  async function persistRecord(record, doneMessage) {
+    setBusy("save");
+    setMessage("");
+    try {
+      const payload = await apiJson("/api/nonconformances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ record }),
+      });
+      setItems(payload.items || []);
+      setMessage(doneMessage);
+      return true;
+    } catch (err) {
+      setMessage("存檔失敗：" + err.message);
+      return false;
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function addRecord() {
+    const ok = await persistRecord(draft, "已新增不符合報告。");
+    if (!ok) return;
+    setShowAdd(false);
+    setDraft(emptyDraft);
+  }
+
+  async function closeRecord(item) {
+    const ok = await persistRecord({ ...item, status: "已關閉", closeDate: new Date().toISOString().split("T")[0], effectiveness: item.effectiveness || "有效" }, "已更新為結案。");
+    if (ok) setModal(null);
+  }
+
+  async function deleteRecord(id) {
+    if (!window.confirm("確定要刪除這筆不符合報告嗎？")) return;
+    setBusy("delete");
+    setMessage("");
+    try {
+      const payload = await apiJson("/api/nonconformances/" + encodeURIComponent(id), { method: "DELETE" });
+      setItems(payload.items || []);
+      setModal(null);
+      setMessage("已刪除不符合報告。");
+    } catch (err) {
+      setMessage("刪除失敗：" + err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function importFile(file) {
+    if (!file) return;
+    setBusy("import");
+    setMessage("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const payload = await apiJson("/api/nonconformances/import", { method: "POST", body: formData });
+      setImportDraft(payload.draft || null);
+      setImportMissing(payload.missing_fields || []);
+      setMessage("已讀取檔案，請確認資料後再存入。");
+    } catch (err) {
+      setMessage("匯入失敗：" + err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function confirmImport() {
+    if (!importDraft) return;
+    const ok = await persistRecord(importDraft, "已匯入不符合報告。");
+    if (!ok) return;
+    setImportDraft(null);
+    setImportMissing([]);
+  }
+
+  return (
+    <div>
+      <SectionHeader title="不符合管理（MP-15）" count={items.length} color="#f87171" />
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <StatCard label="待處理" value={items.filter(item=>item.status==="待處理").length} color="#ef4444" sub="尚未開始" />
+        <StatCard label="處理中" value={items.filter(item=>item.status==="處理中").length} color="#f97316" sub="追蹤中" />
+        <StatCard label="已關閉" value={items.filter(item=>item.status==="已關閉").length} color="#22c55e" sub="已完成" />
+        <StatCard label="已逾期" value={enriched.filter(item=>item.overdue).length} color="#ef4444" sub="需優先處理" />
+      </div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, marginBottom:14, flexWrap:"wrap" }}>
+        <div style={{ color:"#fca5a5", fontSize:12 }}>{message || "可刪除錯誤資料，也可上傳報告檔先解析再確認。"}</div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <label style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:10, color:"#e2e8f0", cursor:"pointer", padding:"9px 18px", fontSize:13, fontWeight:700 }}>
+            {busy==="import" ? "讀取中..." : "上傳報告檔"}
+            <input type="file" accept=".docx,.xlsx,.pdf" onChange={e => importFile(e.target.files && e.target.files[0])} style={{ display:"none" }} />
+          </label>
+          <button onClick={() => setShowAdd(true)} style={{ background: "linear-gradient(135deg, #dc2626, #ef4444)", border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", padding: "9px 18px", fontSize: 13, fontWeight: 700 }}>新增報告</button>
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {enriched.map(item => (
+          <div key={item.id} style={{ background: item.overdue?"rgba(239,68,68,0.12)":"rgba(255,255,255,0.03)", border: `1px solid ${item.overdue?"rgba(239,68,68,0.3)":"rgba(255,255,255,0.08)"}`, borderRadius: 12, padding: "14px 18px" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 260 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 700, color: "#60a5fa", fontFamily: "monospace", fontSize: 13 }}>{item.id}</span>
+                  <Badge color={sevColor(item.severity)}>{item.severity}</Badge>
+                  <Badge color={statusColor(item.status)}>{item.status}</Badge>
+                  {item.overdue && <Badge color="#ef4444">已逾期</Badge>}
+                </div>
+                <div style={{ color: "#e2e8f0", fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{item.description}</div>
+                <div style={{ fontSize: 12, color: "#64748b" }}>{item.dept} · {item.type} · 發生日 {formatDate(item.date)} · 責任人 {item.responsible || "未填"}</div>
+              </div>
+              <div style={{ textAlign: "right", minWidth: 120 }}>
+                <div style={{ fontSize: 12, color: "#64748b" }}>到期日</div>
+                <div style={{ fontWeight: 700, color: item.overdue?"#ef4444":"#e2e8f0", fontSize: 13 }}>{formatDate(item.dueDate)}</div>
+                {item.status==="已關閉" && <div style={{ fontSize: 11, color: "#4ade80", marginTop: 4 }}>結案 {formatDate(item.closeDate)}</div>}
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={() => setModal(item)} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, color: "#94a3b8", cursor: "pointer", padding: "6px 14px", fontSize: 12 }}>詳情</button>
+                <button onClick={() => deleteRecord(item.id)} style={{ background:"rgba(239,68,68,0.14)", border:"1px solid rgba(239,68,68,0.28)", borderRadius:8, color:"#fca5a5", cursor:"pointer", padding:"6px 14px", fontSize:12 }}>刪除</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {modal && (<Modal title={`不符合報告：${modal.id}`} onClose={() => setModal(null)}><div style={{ display: "flex", flexDirection: "column", gap: 14 }}>{[["發生日",formatDate(modal.date)],["部門",modal.dept],["類型",modal.type],["嚴重度",modal.severity],["問題描述",modal.description],["原因分析",modal.rootCause],["改善措施",modal.correctiveAction],["責任人",modal.responsible],["到期日",formatDate(modal.dueDate)],["狀態",modal.status],["結案日",formatDate(modal.closeDate)],["有效性",modal.effectiveness||"未填"]].map(([k,v]) => (<div key={k} style={{ display:"flex", gap:12 }}><div style={{ fontSize:12, color:"#64748b", minWidth:90 }}>{k}</div><div style={{ color:"#e2e8f0", fontWeight:600, fontSize:13 }}>{v}</div></div>))}<div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:8 }}>{modal.status!=="已關閉" && (<button onClick={() => closeRecord(modal)} style={{ background:"linear-gradient(135deg,#059669,#10b981)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"12px 24px", fontSize:14, fontWeight:700 }}>標記結案</button>)}<button onClick={() => deleteRecord(modal.id)} style={{ background:"rgba(239,68,68,0.14)", border:"1px solid rgba(239,68,68,0.28)", borderRadius:10, color:"#fca5a5", cursor:"pointer", padding:"12px 24px", fontSize:14, fontWeight:700 }}>刪除這筆資料</button></div></div></Modal>)}
+      {showAdd && (<Modal title="新增不符合報告" onClose={() => setShowAdd(false)}><div style={{ display:"flex", flexDirection:"column", gap:12 }}>{[["發生日","date","date"],["部門","dept","text"],["問題描述","description","text"],["原因分析","rootCause","text"],["改善措施","correctiveAction","text"],["責任人","responsible","text"],["到期日","dueDate","date"]].map(([label,field,type]) => (<div key={field}><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>{label}</div><input type={type} value={draft[field]} onChange={e=>setDraft({...draft,[field]:e.target.value})} style={inputStyle} /></div>))}<div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>類型</div><select value={draft.type} onChange={e=>setDraft({...draft,type:e.target.value})} style={inputStyle}><option>製程異常</option><option>文件不符</option><option>人員作業</option><option>客戶投訴</option><option>量測異常</option><option>來料不合格</option></select></div><div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>嚴重度</div><select value={draft.severity} onChange={e=>setDraft({...draft,severity:e.target.value})} style={inputStyle}><option>輕微</option><option>中度</option><option>重大</option></select></div><button onClick={addRecord} disabled={busy==="save"} style={{ background:"linear-gradient(135deg,#dc2626,#ef4444)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"12px 24px", fontSize:15, fontWeight:700, marginTop:8, opacity:busy==="save"?0.6:1 }}>{busy==="save"?"存檔中...":"確認新增"}</button></div></Modal>)}
+      {importDraft && (<Modal title="匯入預覽" onClose={() => { setImportDraft(null); setImportMissing([]); }}><div style={{ display:"flex", flexDirection:"column", gap:12 }}>{importMissing.length>0 && <div style={{ background:"rgba(250,204,21,0.1)", border:"1px solid rgba(250,204,21,0.24)", borderRadius:8, padding:10, color:"#fde68a", fontSize:12 }}>以下欄位未完整讀取：{importMissing.join("、")}，請先補齊。</div>}{[["發生日","date","date"],["部門","dept","text"],["問題描述","description","text"],["原因分析","rootCause","text"],["改善措施","correctiveAction","text"],["責任人","responsible","text"],["到期日","dueDate","date"]].map(([label,field,type]) => (<div key={field}><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>{label}</div><input type={type} value={importDraft[field]||""} onChange={e=>setImportDraft({...importDraft,[field]:e.target.value})} style={inputStyle} /></div>))}<div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>類型</div><select value={importDraft.type||"製程異常"} onChange={e=>setImportDraft({...importDraft,type:e.target.value})} style={inputStyle}><option>製程異常</option><option>文件不符</option><option>人員作業</option><option>客戶投訴</option><option>量測異常</option><option>來料不合格</option></select></div><div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>嚴重度</div><select value={importDraft.severity||"輕微"} onChange={e=>setImportDraft({...importDraft,severity:e.target.value})} style={inputStyle}><option>輕微</option><option>中度</option><option>重大</option></select></div><button onClick={confirmImport} disabled={busy==="save"} style={{ background:"linear-gradient(135deg,#dc2626,#ef4444)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"12px 24px", fontSize:15, fontWeight:700, marginTop:8, opacity:busy==="save"?0.6:1 }}>{busy==="save"?"存檔中...":"確認存入"}</button></div></Modal>)}
+    </div>
+  );
+}
+
+function AuditPlanTab({ auditPlans, setAuditPlans }) {
+  const [modal, setModal] = useState(null);
+  const [filter, setFilter] = useState("all");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState("");
+  const [attachments, setAttachments] = useState([]);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [importRecords, setImportRecords] = useState([]);
+  const statusColor = s => s==="已完成"?"#22c55e":s==="執行中"?"#60a5fa":s==="計畫中"?"#f97316":"#ef4444";
+  const filtered = filter==="all" ? auditPlans : auditPlans.filter(item=>item.status===filter);
+  const upcoming = auditPlans.filter(item=>item.status==="計畫中" && daysUntil(item.scheduledDate)<=30 && daysUntil(item.scheduledDate)>=0);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAttachments() {
+      if (!modal) {
+        setAttachments([]);
+        return;
+      }
+      setAttachmentBusy(true);
+      try {
+        const payload = await apiJson("/api/audit-plans/" + encodeURIComponent(modal.id) + "/attachments");
+        if (!cancelled) setAttachments(payload.attachments || []);
+      } catch (err) {
+        if (!cancelled) {
+          setAttachments([]);
+          setMessage("附件讀取失敗：" + err.message);
+        }
+      } finally {
+        if (!cancelled) setAttachmentBusy(false);
+      }
+    }
+    loadAttachments();
+    return () => { cancelled = true; };
+  }, [modal && modal.id]);
+
+  async function persistRecords(records, doneMessage) {
+    setBusy("save");
+    setMessage("");
+    try {
+      const payload = await apiJson("/api/audit-plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records }),
+      });
+      setAuditPlans(payload.items || []);
+      setMessage(doneMessage);
+      return true;
+    } catch (err) {
+      setMessage("存檔失敗：" + err.message);
+      return false;
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function markComplete(plan) {
+    const ok = await persistRecords([{ ...plan, status:"已完成", actualDate:new Date().toISOString().split("T")[0] }], "已更新稽核計畫。");
+    if (ok) setModal(null);
+  }
+
+  async function deletePlan(id) {
+    if (!window.confirm("確定要刪除這筆稽核計畫嗎？")) return;
+    setBusy("delete");
+    try {
+      const payload = await apiJson("/api/audit-plans/" + encodeURIComponent(id), { method:"DELETE" });
+      setAuditPlans(payload.items || []);
+      setModal(null);
+      setMessage("已刪除稽核計畫。");
+    } catch (err) {
+      setMessage("刪除失敗：" + err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function importPlanFile(file) {
+    if (!file) return;
+    setBusy("import");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const payload = await apiJson("/api/audit-plans/import", { method:"POST", body:formData });
+      setImportRecords(payload.records || []);
+      setMessage((payload.records || []).length ? "已讀取稽核計畫檔，請確認後再存入。" : "檔案已上傳，但目前沒有辨識到可匯入的稽核計畫資料。請確認檔案內容是否已填寫。");
+    } catch (err) {
+      setMessage("匯入失敗：" + err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function confirmImportPlans() {
+    if (!importRecords.length) return;
+    const records = importRecords.map(({ missing_fields, ...record }) => record);
+    const ok = await persistRecords(records, "已匯入稽核計畫。");
+    if (ok) setImportRecords([]);
+  }
+
+  function updateImportRecord(field, value) {
+    if (importRecords.length !== 1) return;
+    setImportRecords([{ ...importRecords[0], [field]: value }]);
+  }
+
+  return (
+    <div>
+      <SectionHeader title="稽核計畫（MP-09）" count={auditPlans.length} color="#8b5cf6" />
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <StatCard label="全部計畫" value={auditPlans.length} color="#8b5cf6" />
+        <StatCard label="已完成" value={auditPlans.filter(item=>item.status==="已完成").length} color="#22c55e" />
+        <StatCard label="執行中" value={auditPlans.filter(item=>item.status==="執行中").length} color="#60a5fa" />
+        <StatCard label="30 天內到期" value={upcoming.length} color="#f97316" sub="需排程確認" />
+      </div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, marginBottom:16, flexWrap:"wrap" }}>
+        <div style={{ color:"#c4b5fd", fontSize:12 }}>{message || "可上傳稽核計畫表先解析，再確認存入；詳情內可預覽關聯文件。"}</div>
+        <label style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:10, color:"#e2e8f0", cursor:"pointer", padding:"9px 18px", fontSize:13, fontWeight:700 }}>
+          {busy==="import" ? "讀取中..." : "上傳稽核計畫檔"}
+          <input type="file" accept=".docx,.xlsx,.pdf" onChange={e => importPlanFile(e.target.files && e.target.files[0])} style={{ display:"none" }} />
+        </label>
+      </div>
+      {upcoming.length>0 && (
+        <div style={{ background: "rgba(249,115,22,0.08)", border: "1px solid rgba(249,115,22,0.2)", borderRadius: 12, padding: 16, marginBottom: 20 }}>
+          <div style={{ fontSize: 13, color: "#fb923c", fontWeight: 700, marginBottom: 10 }}>30 天內即將執行</div>
+          {upcoming.map(item => (<div key={item.id} style={{ display:"flex", gap:12, alignItems:"center", marginBottom:6 }}><span style={{ color:"#60a5fa", fontFamily:"monospace", fontSize:12 }}>{item.id}</span><span style={{ color:"#e2e8f0", fontSize:13 }}>{item.dept} · {formatDate(item.scheduledDate)}</span><Badge color="#f97316">剩 {daysUntil(item.scheduledDate)} 天</Badge></div>))}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {["all","計畫中","執行中","已完成"].map(key => (<button key={key} onClick={()=>setFilter(key)} style={{ background:filter===key?"rgba(139,92,246,0.2)":"rgba(255,255,255,0.04)", border:`1px solid ${filter===key?"rgba(139,92,246,0.5)":"rgba(255,255,255,0.1)"}`, borderRadius:8, color:filter===key?"#c4b5fd":"#64748b", cursor:"pointer", padding:"6px 14px", fontSize:12, fontWeight:600 }}>{key==="all"?"全部":key}</button>))}
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead><tr>{["編號","年度","期別","預定日期","部門","受稽人","稽核員","範圍","狀態","發現數","NC 數",""].map(h => (<th key={h} style={{ textAlign:"left", padding:"10px 12px", color:"#64748b", fontWeight:600, borderBottom:"1px solid rgba(255,255,255,0.06)", whiteSpace:"nowrap" }}>{h}</th>))}</tr></thead>
+          <tbody>
+            {filtered.map((item,i) => (
+              <tr key={item.id} style={{ background:i%2===0?"rgba(255,255,255,0.02)":"transparent" }}>
+                <td style={{ padding:"10px 12px", color:"#8b5cf6", fontWeight:700, fontFamily:"monospace", whiteSpace:"nowrap" }}>{item.id}</td>
+                <td style={{ padding:"10px 12px", color:"#94a3b8" }}>{item.year}</td>
+                <td style={{ padding:"10px 12px" }}><Badge color={item.period==="上半年"?"#60a5fa":"#f97316"}>{item.period}</Badge></td>
+                <td style={{ padding:"10px 12px", color:"#94a3b8", whiteSpace:"nowrap" }}>{formatDate(item.scheduledDate)}</td>
+                <td style={{ padding:"10px 12px", color:"#e2e8f0", fontWeight:600 }}>{item.dept}</td>
+                <td style={{ padding:"10px 12px", color:"#94a3b8" }}>{item.auditee}</td>
+                <td style={{ padding:"10px 12px", color:"#94a3b8" }}>{item.auditor}</td>
+                <td style={{ padding:"10px 12px", color:"#64748b", fontSize:11 }}>{item.scope}</td>
+                <td style={{ padding:"10px 12px" }}><Badge color={statusColor(item.status)}>{item.status}</Badge></td>
+                <td style={{ padding:"10px 12px", textAlign:"center", color:item.findings>0?"#f97316":"#94a3b8", fontWeight:700 }}>{item.findings}</td>
+                <td style={{ padding:"10px 12px", textAlign:"center", color:item.ncCount>0?"#ef4444":"#94a3b8", fontWeight:700 }}>{item.ncCount}</td>
+                <td style={{ padding:"10px 12px" }}><div style={{ display:"flex", gap:8 }}><button onClick={()=>setModal(item)} style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:6, color:"#94a3b8", cursor:"pointer", padding:"4px 10px", fontSize:11 }}>詳情</button><button onClick={() => deletePlan(item.id)} style={{ background:"rgba(239,68,68,0.14)", border:"1px solid rgba(239,68,68,0.28)", borderRadius:6, color:"#fca5a5", cursor:"pointer", padding:"4px 10px", fontSize:11 }}>刪除</button></div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {modal && (<Modal title={`稽核計畫：${modal.id}`} onClose={() => setModal(null)}><div style={{ display:"flex", flexDirection:"column", gap:14 }}>{[["計畫編號",modal.id],["受稽部門",modal.dept],["預定日期",formatDate(modal.scheduledDate)],["實際日期",formatDate(modal.actualDate)],["稽核員",modal.auditor],["受稽人",modal.auditee],["稽核範圍",modal.scope],["狀態",modal.status],["發現數",String(modal.findings)],["NC 數",String(modal.ncCount)]].map(([k,v]) => (<div key={k} style={{ display:"flex", gap:12 }}><div style={{ fontSize:12, color:"#64748b", minWidth:90 }}>{k}</div><div style={{ color:"#e2e8f0", fontWeight:600, fontSize:13 }}>{v}</div></div>))}<div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, padding:12 }}><div style={{ fontSize:12, color:"#c4b5fd", marginBottom:8 }}>關聯文件</div>{attachmentBusy ? <div style={{ color:"#94a3b8", fontSize:12 }}>讀取中...</div> : attachments.length===0 ? <div style={{ color:"#94a3b8", fontSize:12 }}>找不到關聯文件。</div> : <div style={{ display:"flex", flexDirection:"column", gap:10 }}>{attachments.map(item => (<div key={item.path} style={{ border:"1px solid rgba(255,255,255,0.08)", borderRadius:8, padding:10 }}><div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}><div><div style={{ color:"#e2e8f0", fontSize:13, fontWeight:600 }}>{item.name}</div><div style={{ color:item.exists?"#64748b":"#fca5a5", fontSize:11 }}>{item.exists ? (item.previewable ? "可直接預覽 PDF" : item.text_previewable ? "可直接預覽文字內容" : "可開啟或下載") : "找不到文件"}</div></div>{item.exists && <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}><a href={item.download_url} style={{ color:"#93c5fd", fontSize:12, textDecoration:"none" }}>下載</a>{item.previewable && <a href={item.view_url} target="_blank" rel="noreferrer" style={{ color:"#c4b5fd", fontSize:12, textDecoration:"none" }}>新頁預覽</a>}{item.text_previewable && <a href={item.preview_text_url} target="_blank" rel="noreferrer" style={{ color:"#c4b5fd", fontSize:12, textDecoration:"none" }}>文字預覽</a>}</div>}</div>{item.previewable && item.exists && <iframe src={item.view_url} title={item.name} style={{ width:"100%", height:260, marginTop:10, border:"1px solid rgba(255,255,255,0.08)", borderRadius:8, background:"#fff" }} />}{item.text_previewable && item.exists && <iframe src={item.preview_text_url} title={item.name + "-text"} style={{ width:"100%", height:260, marginTop:10, border:"1px solid rgba(255,255,255,0.08)", borderRadius:8, background:"#fff" }} />}</div>))}</div>}</div><div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:8 }}>{modal.status!=="已完成" && (<button onClick={()=>markComplete(modal)} style={{ background:"linear-gradient(135deg,#7c3aed,#8b5cf6)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"12px 24px", fontSize:14, fontWeight:700 }}>標記完成</button>)}<button onClick={()=>deletePlan(modal.id)} style={{ background:"rgba(239,68,68,0.14)", border:"1px solid rgba(239,68,68,0.28)", borderRadius:10, color:"#fca5a5", cursor:"pointer", padding:"12px 24px", fontSize:14, fontWeight:700 }}>刪除這筆資料</button></div></div></Modal>)}
+      {importRecords.length>0 && (<Modal title="匯入預覽" onClose={() => setImportRecords([])}><div style={{ display:"flex", flexDirection:"column", gap:12 }}>{importRecords.length===1 ? <div style={{ display:"flex", flexDirection:"column", gap:12 }}>{importRecords[0].missing_fields?.length>0 && <div style={{ background:"rgba(250,204,21,0.1)", border:"1px solid rgba(250,204,21,0.24)", borderRadius:8, padding:10, color:"#fde68a", fontSize:12 }}>以下欄位未完整讀取：{importRecords[0].missing_fields.join("、")}</div>}{[["預定日期","scheduledDate","date"],["受稽部門","dept","text"],["稽核員","auditor","text"],["受稽人","auditee","text"],["稽核範圍","scope","text"]].map(([label,field,type]) => (<div key={field}><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>{label}</div><input type={type} value={importRecords[0][field]||""} onChange={e=>updateImportRecord(field, e.target.value)} style={inputStyle} /></div>))}</div> : <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, padding:12 }}><div style={{ color:"#e2e8f0", fontWeight:700, marginBottom:8 }}>本次共讀到 {importRecords.length} 筆資料</div>{importRecords.slice(0,8).map(item => (<div key={item.id} style={{ display:"flex", justifyContent:"space-between", gap:12, borderBottom:"1px solid rgba(255,255,255,0.05)", padding:"8px 0" }}><span style={{ color:"#c4b5fd", fontFamily:"monospace", fontSize:12 }}>{item.id}</span><span style={{ color:"#94a3b8", fontSize:12 }}>{item.dept || "未讀到部門"}</span><span style={{ color:"#94a3b8", fontSize:12 }}>{formatDate(item.scheduledDate)}</span></div>))}</div>}<button onClick={confirmImportPlans} disabled={busy==="save"} style={{ background:"linear-gradient(135deg,#7c3aed,#8b5cf6)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"12px 24px", fontSize:15, fontWeight:700, marginTop:8, opacity:busy==="save"?0.6:1 }}>{busy==="save"?"存檔中...":"確認存入"}</button></div></Modal>)}
+    </div>
+  );
+}
+
+function EnvironmentTab({ envRecords, setEnvRecords }) {
+  const emptyDraft = { date:"", measuredAt:"", location:"潔淨室A區", point:"", particles03:0, particles05:0, particles5:0, temp:"", humidity:"", pressure:"", operator:"", result:"" };
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState("");
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd, setRangeEnd] = useState("");
+  const [summary, setSummary] = useState({ total: envRecords.length, passed: envRecords.filter(r=>r.result==="合格").length, warning: envRecords.filter(r=>r.result==="警告").length, failed: envRecords.filter(r=>r.result==="不合格").length });
+  const [showAdd, setShowAdd] = useState(false);
+  const [draft, setDraft] = useState(emptyDraft);
+  const [importPreview, setImportPreview] = useState([]);
+  const [importSummary, setImportSummary] = useState(null);
+  const environmentSortKey = (item) => {
+    const measuredAt = String(item?.measuredAt || "").trim();
+    if (measuredAt) {
+      const measuredValue = Date.parse(measuredAt);
+      if (!Number.isNaN(measuredValue)) return measuredValue;
+    }
+    const datePart = String(item?.date || "").trim();
+    const timeMatch = String(item?.location || "").match(/(\d{1,2}:\d{2}:\d{2})/);
+    const timePart = timeMatch ? timeMatch[1] : "00:00:00";
+    const candidate = `${datePart}T${timePart}`;
+    const value = Date.parse(candidate);
+    return Number.isNaN(value) ? 0 : value;
+  };
+  const sorted = [...envRecords].sort((a, b) => environmentSortKey(a) - environmentSortKey(b));
+  const resultColor = r => r==="合格"?"#22c55e":r==="警告"?"#eab308":"#ef4444";
+
+  useEffect(() => {
+    const nextSummary = {
+      total: envRecords.length,
+      passed: envRecords.filter(item=>item.result==="合格").length,
+      warning: envRecords.filter(item=>item.result==="警告").length,
+      failed: envRecords.filter(item=>item.result==="不合格").length,
+    };
+    setSummary(nextSummary);
+  }, [envRecords]);
+
+  function buildRecord(record) {
+    const point = String(record.point || "").trim();
+    const measuredAt = String(record.measuredAt || "").trim();
+    const particles03 = parseInt(record.particles03 || 0, 10) || 0;
+    const particles05 = parseInt(record.particles05 || 0, 10) || 0;
+    const particles5 = parseInt(record.particles5 || 0, 10) || 0;
+    const temp = record.temp === "" ? "" : parseFloat(record.temp || 0) || 0;
+    const humidity = record.humidity === "" ? "" : parseFloat(record.humidity || 0) || 0;
+    const pressure = record.pressure === "" ? "" : parseFloat(record.pressure || 0) || 0;
+    let result = record.result;
+    if (!result) {
+      if (particles05 > 1000 || particles5 > 35 || (temp !== "" && (temp > 23 || temp < 21)) || (humidity !== "" && (humidity > 50 || humidity < 40)) || (pressure !== "" && pressure < 10)) result = "不合格";
+      else if (particles05 > 800 || particles5 > 20 || (temp !== "" && temp > 22.5) || (humidity !== "" && humidity > 48)) result = "警告";
+      else result = "合格";
+    }
+    return { ...record, point, measuredAt, particles03, particles05, particles1:0, particles5, temp, humidity, pressure, result };
+  }
+
+  async function saveRecords(records, doneMessage, replaceSourceFile = "") {
+    setBusy("save");
+    setMessage("");
+    try {
+      const payload = await apiJson("/api/environment-records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records, replace_source_file: replaceSourceFile }),
+      });
+      setEnvRecords(payload.items || []);
+      setSummary(payload.summary || { total:0, passed:0, warning:0, failed:0 });
+      setMessage(doneMessage);
+      return true;
+    } catch (err) {
+      setMessage("存檔失敗：" + err.message);
+      return false;
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function loadRange(start = rangeStart, end = rangeEnd) {
+    setBusy("query");
+    setMessage("");
+    try {
+      const params = new URLSearchParams();
+      if (start) params.set("start", start);
+      if (end) params.set("end", end);
+      const payload = await apiJson("/api/environment-records" + (params.toString() ? "?" + params.toString() : ""));
+      setEnvRecords(payload.items || []);
+      setSummary(payload.summary || { total:0, passed:0, warning:0, failed:0 });
+      setMessage("已依時間區間讀取資料。");
+    } catch (err) {
+      setMessage("讀取失敗：" + err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function addRecord() {
+    const ok = await saveRecords([buildRecord(draft)], "已新增環境監控資料。");
+    if (!ok) return;
+    setShowAdd(false);
+    setDraft(emptyDraft);
+  }
+
+  async function deleteRecord(id) {
+    if (!window.confirm("確定要刪除這筆監控資料嗎？")) return;
+    setBusy("delete");
+    try {
+      const payload = await apiJson("/api/environment-records/" + encodeURIComponent(id), { method:"DELETE" });
+      setEnvRecords(payload.items || []);
+      setSummary(payload.summary || { total:0, passed:0, warning:0, failed:0 });
+      setMessage("已刪除監控資料。");
+    } catch (err) {
+      setMessage("刪除失敗：" + err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function deleteRange() {
+    if (!rangeStart && !rangeEnd) {
+      setMessage("請先選擇要刪除的日期區間。");
+      return;
+    }
+    if (!window.confirm("確定要刪除此時間區間的所有監控資料嗎？")) return;
+    setBusy("delete-range");
+    try {
+      const payload = await apiJson("/api/environment-records/delete-range", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ start: rangeStart, end: rangeEnd }),
+      });
+      setEnvRecords(payload.items || []);
+      setSummary(payload.summary || { total:0, passed:0, warning:0, failed:0 });
+      setMessage(`已刪除 ${payload.deleted || 0} 筆資料。`);
+    } catch (err) {
+      setMessage("區間刪除失敗：" + err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function importFile(file) {
+    if (!file) return;
+    setBusy("import");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const payload = await apiJson("/api/environment-records/import", { method:"POST", body:formData });
+      setImportPreview(payload.records || []);
+      setImportSummary(payload.summary || null);
+      setMessage((payload.records || []).length ? "已讀取原始資料，請確認後再存入。" : "檔案已上傳，但目前沒有辨識到可匯入的環境監控資料。請確認原始檔格式。");
+    } catch (err) {
+      setMessage("匯入失敗：" + err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function confirmImport() {
+    if (!importPreview.length) return;
+    const replaceSourceFile = importPreview[0]?.source_file || "";
+    const records = importPreview.map(({ missing_fields, id, ...record }) => record);
+    const ok = await saveRecords(records, `已匯入 ${records.length} 筆環境監控資料。`, replaceSourceFile);
+    if (!ok) return;
+    setImportPreview([]);
+    setImportSummary(null);
+  }
+
+  const passRate = summary.total > 0 ? Math.round((summary.passed / summary.total) * 100) : 0;
+  const formatMaybeNumber = (value, digits = 1) => {
+    if (value === "" || value === null || value === undefined) return "—";
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric.toFixed(digits) : "—";
+  };
+  const formatMaybeInteger = (value) => {
+    if (value === "" || value === null || value === undefined) return "—";
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric.toLocaleString() : "—";
+  };
+
+  return (
+    <div>
+      <SectionHeader title="工作環境監控（MP-06）" count={envRecords.length} color="#14b8a6" />
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <StatCard label="總筆數" value={summary.total} color="#14b8a6" />
+        <StatCard label="合格" value={summary.passed} color="#22c55e" />
+        <StatCard label="警告" value={summary.warning} color="#eab308" />
+        <StatCard label="不合格" value={summary.failed} color="#ef4444" />
+        <StatCard label="合格率" value={`${passRate}%`} color={passRate>=90?"#22c55e":passRate>=80?"#eab308":"#ef4444"} sub="目前篩選結果" />
+      </div>
+      <div style={{ background: "rgba(20,184,166,0.06)", border: "1px solid rgba(20,184,166,0.2)", borderRadius: 12, padding: 16, marginBottom: 20 }}>
+        <div style={{ fontSize: 13, color: "#2dd4bf", fontWeight: 700, marginBottom: 8 }}>Class 1000 參考標準</div>
+        <div style={{ display:"flex", gap:24, flexWrap:"wrap", fontSize:12, color:"#64748b" }}>
+          <span>0.5μm 粒子 ≤ 1000</span>
+          <span>5μm 粒子 ≤ 35</span>
+          <span>溫度 21–23°C</span>
+          <span>濕度 40–50% RH</span>
+          <span>正壓 ≥ 10 Pa</span>
+        </div>
+      </div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, marginBottom:14, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
+          <input type="date" value={rangeStart} onChange={e => setRangeStart(e.target.value)} style={{ ...inputStyle, width:170 }} />
+          <span style={{ color:"#64748b", fontSize:12 }}>至</span>
+          <input type="date" value={rangeEnd} onChange={e => setRangeEnd(e.target.value)} style={{ ...inputStyle, width:170 }} />
+          <button onClick={() => loadRange()} style={{ background:"rgba(20,184,166,0.14)", border:"1px solid rgba(20,184,166,0.28)", borderRadius:10, color:"#99f6e4", cursor:"pointer", padding:"9px 16px", fontSize:13, fontWeight:700 }}>查詢區間</button>
+          <button onClick={() => { setRangeStart(""); setRangeEnd(""); loadRange("", ""); }} style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:10, color:"#cbd5e1", cursor:"pointer", padding:"9px 16px", fontSize:13, fontWeight:700 }}>清除篩選</button>
+        </div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <label style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:10, color:"#e2e8f0", cursor:"pointer", padding:"9px 18px", fontSize:13, fontWeight:700 }}>
+            {busy==="import" ? "讀取中..." : "上傳原始資料"}
+            <input type="file" accept=".xlsx,.csv" onChange={e => importFile(e.target.files && e.target.files[0])} style={{ display:"none" }} />
+          </label>
+          <button onClick={deleteRange} style={{ background:"rgba(239,68,68,0.14)", border:"1px solid rgba(239,68,68,0.28)", borderRadius:10, color:"#fca5a5", cursor:"pointer", padding:"9px 18px", fontSize:13, fontWeight:700 }}>刪除此區間</button>
+          <button onClick={() => setShowAdd(true)} style={{ background: "linear-gradient(135deg, #0d9488, #14b8a6)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"9px 18px", fontSize:13, fontWeight:700 }}>新增監控資料</button>
+        </div>
+      </div>
+      <div style={{ color:"#99f6e4", fontSize:12, marginBottom:14 }}>{message || "可依日期區間查詢或刪除，也可上傳 Excel/CSV 先讀取再存入。"}</div>
+      <div style={{ overflowX:"auto" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+          <thead><tr>{["編號","日期","點位","地點","0.3μm","0.5μm","5.0μm","溫度","濕度","正壓","記錄者","結果",""].map(h => (<th key={h} style={{ textAlign:"left", padding:"8px 10px", color:"#64748b", fontWeight:600, borderBottom:"1px solid rgba(255,255,255,0.06)", whiteSpace:"nowrap" }}>{h}</th>))}</tr></thead>
+          <tbody>
+            {sorted.map((item,i) => (
+              <tr key={item.id} style={{ background:i%2===0?"rgba(255,255,255,0.02)":"transparent" }}>
+                <td style={{ padding:"8px 10px", color:"#14b8a6", fontFamily:"monospace" }}>{item.id}</td>
+                <td style={{ padding:"8px 10px", color:"#94a3b8", whiteSpace:"nowrap" }}>{formatDate(item.date)}</td>
+                <td style={{ padding:"8px 10px", color:"#94a3b8" }}>{item.point || "—"}</td>
+                <td style={{ padding:"8px 10px", color:"#e2e8f0" }}>{item.location}</td>
+                <td style={{ padding:"8px 10px", color:"#94a3b8" }}>{formatMaybeInteger(item.particles03)}</td>
+                <td style={{ padding:"8px 10px", color:item.particles05>1000?"#ef4444":item.particles05>800?"#eab308":"#94a3b8", fontWeight:item.particles05>800?700:400 }}>{formatMaybeInteger(item.particles05)}</td>
+                <td style={{ padding:"8px 10px", color:item.particles5>35?"#ef4444":item.particles5>20?"#eab308":"#94a3b8", fontWeight:item.particles5>20?700:400 }}>{formatMaybeInteger(item.particles5)}</td>
+                <td style={{ padding:"8px 10px", color:item.temp === "" || item.temp === null || item.temp === undefined ? "#64748b" : item.temp>23||item.temp<21?"#ef4444":"#94a3b8" }}>{formatMaybeNumber(item.temp)}</td>
+                <td style={{ padding:"8px 10px", color:item.humidity === "" || item.humidity === null || item.humidity === undefined ? "#64748b" : item.humidity>50||item.humidity<40?"#ef4444":"#94a3b8" }}>{formatMaybeNumber(item.humidity)}</td>
+                <td style={{ padding:"8px 10px", color:item.pressure === "" || item.pressure === null || item.pressure === undefined ? "#64748b" : item.pressure<10?"#ef4444":"#94a3b8" }}>{formatMaybeNumber(item.pressure)}</td>
+                <td style={{ padding:"8px 10px", color:"#94a3b8" }}>{item.operator || "—"}</td>
+                <td style={{ padding:"8px 10px" }}><Badge color={resultColor(item.result)}>{item.result}</Badge></td>
+                <td style={{ padding:"8px 10px" }}><button onClick={() => deleteRecord(item.id)} style={{ background:"rgba(239,68,68,0.14)", border:"1px solid rgba(239,68,68,0.28)", borderRadius:8, color:"#fca5a5", cursor:"pointer", padding:"6px 12px", fontSize:11 }}>刪除</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {showAdd && (<Modal title="新增環境監控資料" onClose={() => setShowAdd(false)}><div style={{ display:"flex", flexDirection:"column", gap:12 }}>{[["日期","date","date"],["量測時間","measuredAt","datetime-local"],["點位","point","text"],["地點","location","text"],["0.3μm 粒子","particles03","number"],["0.5μm 粒子","particles05","number"],["5.0μm 粒子","particles5","number"],["溫度","temp","number"],["濕度","humidity","number"],["正壓","pressure","number"],["記錄者","operator","text"]].map(([label,field,type]) => (<div key={field}><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>{label}</div><input type={type} value={draft[field]} onChange={e=>setDraft({...draft,[field]:e.target.value})} style={inputStyle} /></div>))}<button onClick={addRecord} disabled={busy==="save"} style={{ background:"linear-gradient(135deg,#0d9488,#14b8a6)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"12px 24px", fontSize:15, fontWeight:700, marginTop:8, opacity:busy==="save"?0.6:1 }}>{busy==="save"?"存檔中...":"確認新增"}</button></div></Modal>)}
+      {importPreview.length>0 && (<Modal title="匯入預覽" onClose={() => { setImportPreview([]); setImportSummary(null); }}><div style={{ display:"flex", flexDirection:"column", gap:12 }}>{importSummary && <div style={{ background:"rgba(20,184,166,0.08)", border:"1px solid rgba(20,184,166,0.24)", borderRadius:8, padding:10, color:"#99f6e4", fontSize:12 }}>本次解析：{importSummary.total} 筆，合格 {importSummary.passed}、警告 {importSummary.warning}、不合格 {importSummary.failed}</div>}<div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, padding:12, maxHeight:340, overflowY:"auto" }}>{importPreview.slice(0,20).map(item => (<div key={item.id || item.source_file + item.date} style={{ display:"grid", gridTemplateColumns:"110px 1fr 120px", gap:12, borderBottom:"1px solid rgba(255,255,255,0.05)", padding:"8px 0" }}><span style={{ color:"#5eead4", fontFamily:"monospace", fontSize:12 }}>{formatDate(item.date)}</span><span style={{ color:"#94a3b8", fontSize:12 }}>點位 {item.point || "—"} · {item.location} · 0.3μm {formatMaybeInteger(item.particles03)} · 0.5μm {formatMaybeInteger(item.particles05)}</span><span style={{ color:item.missing_fields?.length?"#fde68a":"#cbd5e1", fontSize:12, textAlign:"right" }}>{item.missing_fields?.length ? `需補 ${item.missing_fields.join("/")}` : item.result}</span></div>))}</div><button onClick={confirmImport} disabled={busy==="save"} style={{ background:"linear-gradient(135deg,#0d9488,#14b8a6)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"12px 24px", fontSize:15, fontWeight:700, marginTop:8, opacity:busy==="save"?0.6:1 }}>{busy==="save"?"存檔中...":"確認存入"}</button></div></Modal>)}
+    </div>
+  );
+}
+
+function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords, setQualityRecords, nonConformances }) {
+  const [downloadType, setDownloadType] = useState("");
+  const [message, setMessage] = useState("");
+  const [shipmentOrders, setShipmentOrders] = useState([]);
+  const [shipmentLoading, setShipmentLoading] = useState(true);
+  const [shipmentBusy, setShipmentBusy] = useState(false);
+  const [shipmentMessage, setShipmentMessage] = useState("");
+  const [shipmentOrderNo, setShipmentOrderNo] = useState("");
+  const [shipmentForm, setShipmentForm] = useState({ date:"", department:"", requester:"", product_name:"", spec:"", quantity:"", unit:"", remark:"", batch_display:"" });
+  const [selectedLots, setSelectedLots] = useState([]);
+  const [engineCatalog, setEngineCatalog] = useState([]);
+  const [engineTemplateCode, setEngineTemplateCode] = useState("shipping_pack");
+  const [enginePrompt, setEnginePrompt] = useState("");
+  const [engineSuggestions, setEngineSuggestions] = useState([]);
+  const [engineBusy, setEngineBusy] = useState(false);
+  const [engineMessage, setEngineMessage] = useState("");
+  const [selectedNcId, setSelectedNcId] = useState("");
+  const [recordReadBusy, setRecordReadBusy] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCatalog() {
+      setShipmentLoading(true);
+      try {
+        const response = await fetch("/api/shipment-draft/catalog");
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
+        if (!cancelled) {
+          const orders = payload.orders || [];
+          setShipmentOrders(orders);
+          if (orders.length > 0) setShipmentOrderNo(prev => prev || orders[0].order_no);
+        }
+      } catch (err) {
+        if (!cancelled) setShipmentMessage("讀取出貨單資料失敗: " + err.message);
+      } finally {
+        if (!cancelled) setShipmentLoading(false);
+      }
+    }
+    loadCatalog();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadRecordEngineCatalog() {
+      try {
+        const response = await fetch("/api/record-engine/catalog");
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
+        if (!cancelled) {
+          const templates = payload.templates || [];
+          setEngineCatalog(templates);
+          if (templates.length > 0 && !templates.some(item => item.code === engineTemplateCode)) {
+            setEngineTemplateCode(templates[0].code);
+          }
+        }
+      } catch (err) {
+        if (!cancelled) setEngineMessage("載入紀錄模板失敗: " + err.message);
+      }
+    }
+    loadRecordEngineCatalog();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedNcId && nonConformances && nonConformances.length > 0) {
+      setSelectedNcId(nonConformances[0].id);
+    }
+  }, [nonConformances, selectedNcId]);
+
+  const selectedOrder = shipmentOrders.find(item => item.order_no === shipmentOrderNo) || null;
+
+  useEffect(() => {
+    if (!selectedOrder) return;
+    setShipmentForm({
+      date: selectedOrder.ship_date_suggested || "",
+      department: selectedOrder.department_suggested || "",
+      requester: selectedOrder.requester_suggested || "",
+      product_name: selectedOrder.product_name_suggested || selectedOrder.source_product || "",
+      spec: selectedOrder.spec_suggested || "",
+      quantity: selectedOrder.quantity_suggested || "",
+      unit: selectedOrder.unit_suggested || "",
+      remark: selectedOrder.remark_suggested || "",
+      batch_display: selectedOrder.batch_display_suggested || selectedOrder.order_no,
+    });
+    setSelectedLots([]);
+    setShipmentMessage("");
+  }, [shipmentOrderNo]);
+
+  function updateProdRecord(index, field, value) {
+    setProdRecords(prev => prev.map((row, i) => {
+      if (i !== index) return row;
+      const next = { ...row, [field]: value };
+      if (field === "input" || field === "good" || field === "defect") {
+        const input = Number(field === "input" ? value : next.input) || 0;
+        const good = Number(field === "good" ? value : next.good) || 0;
+        next.yieldRate = input ? Number((good / input * 100).toFixed(1)) : "";
+      }
+      return next;
+    }));
+  }
+
+  function updateQualityRecord(index, field, value) {
+    setQualityRecords(prev => prev.map((row, i) => i === index ? { ...row, [field]: value } : row));
+  }
+
+  function addProdRecord() {
+    setProdRecords(prev => prev.concat({ lot:"LOT-" + String(prev.length + 1).padStart(3, "0"), customer:"", product:"", input:0, good:0, defect:0, yieldRate:"", defectReasons:[], operator:"", note:"" }));
+  }
+
+  function addQualityRecord() {
+    setQualityRecords(prev => prev.concat({ materialName:"", batchNo:"", quantity:"", spec:"", inspQty:"", ph:"", density:"", ri:"", rotation:"", result:"PASS", note:"" }));
+  }
+
+  async function loadExistingRecordData(kind) {
+    const isProduction = kind === "production";
+    const label = isProduction ? "生產日報" : "品質檢驗記錄";
+    if (!window.confirm(label + " 會覆蓋目前頁面中的暫存資料，確定要讀取既有紀錄嗎？")) return;
+    setRecordReadBusy(kind);
+    setMessage("");
+    try {
+      const response = await fetch(isProduction ? "/api/production-records/read-existing" : "/api/quality-records/read-existing");
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
+      const records = payload.records || [];
+      if (isProduction) setProdRecords(records);
+      else setQualityRecords(records);
+      if (records.length === 0) {
+        setMessage("目前沒有讀到可匯入的" + label + "。");
+      } else {
+        const shortPath = payload.source_file ? payload.source_file.split("\\").slice(-3).join("\\") : "";
+        setMessage("已讀取 " + records.length + " 筆" + label + (shortPath ? "，來源：" + shortPath : "。"));
+      }
+    } catch (err) {
+      setMessage("讀取" + label + "失敗：" + err.message);
+    } finally {
+      setRecordReadBusy("");
+    }
+  }
+
+  function buildEnginePayload() {
+    const selectedNc = (nonConformances || []).find(item => item.id === selectedNcId) || (nonConformances || [])[0] || null;
+    return {
+      template_code: engineTemplateCode,
+      prompt: enginePrompt,
+      env_records: envRecords,
+      prod_records: prodRecords,
+      quality_records: qualityRecords,
+      shipment_request: {
+        order_no: shipmentOrderNo,
+        selected_lots: selectedLots,
+        ...shipmentForm,
+      },
+      nonconformance: selectedNc,
+    };
+  }
+
+  async function suggestRecordTemplates() {
+    setEngineBusy(true);
+    setEngineMessage("");
+    try {
+      const response = await fetch("/api/record-engine/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: enginePrompt,
+          context: {
+            env_count: envRecords.length,
+            prod_count: prodRecords.length,
+            quality_count: qualityRecords.length,
+            shipment_order_count: shipmentOrders.length,
+            nonconformance_count: (nonConformances || []).length,
+          },
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
+      const templates = payload.templates || [];
+      setEngineSuggestions(templates.slice(0, 4));
+      if (templates.length > 0) {
+        setEngineTemplateCode(templates[0].code);
+        setEngineMessage("已依目前提示與資料，找出較適合的模板。");
+      } else {
+        setEngineMessage("目前沒有可推薦的模板。");
+      }
+    } catch (err) {
+      setEngineMessage("分析建議失敗: " + err.message);
+    } finally {
+      setEngineBusy(false);
+    }
+  }
+
+  async function generateEngineRecord() {
+    setEngineBusy(true);
+    setEngineMessage("");
+    try {
+      const response = await fetch("/api/record-engine/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildEnginePayload()),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || ("HTTP " + response.status));
+      }
+      const selectedTemplate = engineCatalog.find(item => item.code === engineTemplateCode);
+      const fallbackName = selectedTemplate ? (selectedTemplate.title + (selectedTemplate.bundle ? ".zip" : ".xlsx")) : "紀錄草稿.xlsx";
+      downloadBlob(await response.blob(), fallbackName);
+      setEngineMessage("已產生 " + (selectedTemplate ? selectedTemplate.title : "紀錄草稿") + "。");
+    } catch (err) {
+      setEngineMessage("產生紀錄失敗: " + err.message);
+    } finally {
+      setEngineBusy(false);
+    }
+  }
+
+  async function downloadRecords(type, data, fallbackName) {
+    setDownloadType(type);
+    setMessage("");
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, data }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || ("HTTP " + response.status));
+      }
+      downloadBlob(await response.blob(), fallbackName);
+      setMessage("已下載 " + fallbackName);
+    } catch (err) {
+      setMessage("下載失敗: " + err.message);
+    } finally {
+      setDownloadType("");
+    }
+  }
+
+  async function generateShipmentDraft() {
+    if (!shipmentOrderNo) {
+      setShipmentMessage("請先選擇訂單。");
+      return;
+    }
+    setShipmentBusy(true);
+    setShipmentMessage("");
+    try {
+      const response = await fetch("/api/shipment-draft/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_no: shipmentOrderNo, selected_lots: selectedLots, ...shipmentForm }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || ("HTTP " + response.status));
+      }
+      downloadBlob(await response.blob(), shipmentOrderNo + "_出貨單草稿.xlsx");
+      setShipmentMessage("已產生出貨單草稿。");
+    } catch (err) {
+      setShipmentMessage("出貨單草稿產生失敗: " + err.message);
+    } finally {
+      setShipmentBusy(false);
+    }
+  }
+
+  const prodLowYield = prodRecords.filter(row => Number(row.yieldRate) < 95).length;
+  const qualityNg = qualityRecords.filter(row => ["NG", "FAIL"].includes(String(row.result).toUpperCase())).length;
+  const envWarning = envRecords.filter(row => row.result && row.result !== "合格").length;
+
+  return (
+    <div>
+      <PageIntro
+        eyebrow="QMS Record Workspace"
+        title="記錄匯出"
+        description="這一頁負責整理生產、品質、環境與出貨相關記錄。你可以先讀取既有正式資料，再做微調、匯出，或交給紀錄生成引擎產出下游草稿。"
+        actions={
+          <>
+            <button onClick={() => downloadRecords("production", prodRecords, "生產記錄.xlsx")} disabled={downloadType !== ""} style={buttonStyle("primary", downloadType !== "" && downloadType !== "production")}>{downloadType === "production" ? "下載中..." : "下載生產記錄"}</button>
+            <button onClick={() => downloadRecords("quality", qualityRecords, "品質檢驗記錄.xlsx")} disabled={downloadType !== ""} style={buttonStyle("success", downloadType !== "" && downloadType !== "quality")}>{downloadType === "quality" ? "下載中..." : "下載品質檢驗記錄"}</button>
+            <button onClick={() => downloadRecords("env", envRecords, "環境監測記錄.xlsx")} disabled={downloadType !== ""} style={buttonStyle("secondary", downloadType !== "" && downloadType !== "env")}>{downloadType === "env" ? "下載中..." : "下載環境監測記錄"}</button>
+          </>
+        }
+      >
+        <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+          <StatCard label="生產記錄" value={prodRecords.length} color="#38bdf8" sub={prodLowYield > 0 ? prodLowYield + " 批低良率" : "良率正常"} />
+          <StatCard label="進料檢驗" value={qualityRecords.length} color="#22c55e" sub={qualityNg > 0 ? qualityNg + " 批異常" : "全部合格"} />
+          <StatCard label="環境監測" value={envRecords.length} color="#14b8a6" sub={envWarning > 0 ? envWarning + " 筆警示" : "無警示"} />
+        </div>
+        {message && <div style={{ marginTop:14, fontSize:12, color:"#bae6fd" }}>{message}</div>}
+      </PageIntro>
+
+      <Panel
+        title="生產批次"
+        description="優先維護正式生產日報資料。讀取既有記錄後可直接修正欄位，再匯出成正式 Excel。"
+        accent="#38bdf8"
+        actions={
+          <>
+            <button onClick={() => loadExistingRecordData("production")} disabled={recordReadBusy !== ""} style={buttonStyle("secondary", recordReadBusy !== "" && recordReadBusy !== "production")}>{recordReadBusy === "production" ? "讀取中..." : "讀取既有生產日報"}</button>
+            <button onClick={addProdRecord} style={buttonStyle("primary")}>新增列</button>
+          </>
+        }
+        style={{ marginBottom: 20 }}
+      >
+        <div style={tableShellStyle}>
+          <table style={{ width:"100%", borderCollapse:"collapse", minWidth:980 }}>
+            <thead><tr>{["批號","客戶","產品","投入數","良品數","不良數","良率 %","不良原因","作業員","備註",""].map(head => <th key={head} style={tableHeadCellStyle}>{head}</th>)}</tr></thead>
+            <tbody>
+              {prodRecords.map((row, index) => (
+                <tr key={row.lot + "-" + index}>
+                  <td style={tableRowCellStyle}><input value={row.lot} onChange={e => updateProdRecord(index, "lot", e.target.value)} style={inputStyle} /></td>
+                  <td style={tableRowCellStyle}><input value={row.customer} onChange={e => updateProdRecord(index, "customer", e.target.value)} style={inputStyle} /></td>
+                  <td style={tableRowCellStyle}><input value={row.product} onChange={e => updateProdRecord(index, "product", e.target.value)} style={inputStyle} /></td>
+                  <td style={tableRowCellStyle}><input type="number" value={row.input} onChange={e => updateProdRecord(index, "input", e.target.value)} style={inputStyle} /></td>
+                  <td style={tableRowCellStyle}><input type="number" value={row.good} onChange={e => updateProdRecord(index, "good", e.target.value)} style={inputStyle} /></td>
+                  <td style={tableRowCellStyle}><input type="number" value={row.defect} onChange={e => updateProdRecord(index, "defect", e.target.value)} style={inputStyle} /></td>
+                  <td style={{ ...tableRowCellStyle, color:Number(row.yieldRate) < 95 ? "#fca5a5" : "#86efac", fontWeight:700 }}>{row.yieldRate === "" ? "--" : row.yieldRate}</td>
+                  <td style={tableRowCellStyle}><input value={Array.isArray(row.defectReasons) ? row.defectReasons.join(", ") : row.defectReasons} onChange={e => updateProdRecord(index, "defectReasons", e.target.value.split(/[;,]/).map(item => item.trim()).filter(Boolean))} style={inputStyle} /></td>
+                  <td style={tableRowCellStyle}><input value={row.operator} onChange={e => updateProdRecord(index, "operator", e.target.value)} style={inputStyle} /></td>
+                  <td style={tableRowCellStyle}><input value={row.note} onChange={e => updateProdRecord(index, "note", e.target.value)} style={inputStyle} /></td>
+                  <td style={tableRowCellStyle}><button onClick={() => setProdRecords(prev => prev.filter((_, i) => i !== index))} style={buttonStyle("danger")}>刪除</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      <Panel
+        title="進料檢驗"
+        description="集中維護原料與檢驗紀錄，方便快速查核、修正與匯出。"
+        accent="#22c55e"
+        actions={
+          <>
+            <button onClick={() => loadExistingRecordData("quality")} disabled={recordReadBusy !== ""} style={buttonStyle("secondary", recordReadBusy !== "" && recordReadBusy !== "quality")}>{recordReadBusy === "quality" ? "讀取中..." : "讀取既有品質記錄"}</button>
+            <button onClick={addQualityRecord} style={buttonStyle("success")}>新增列</button>
+          </>
+        }
+        style={{ marginBottom: 20 }}
+      >
+        <div style={tableShellStyle}>
+          <table style={{ width:"100%", borderCollapse:"collapse", minWidth:1080 }}>
+            <thead><tr>{["材料名稱","批號","數量","規格","檢驗數量","PH","比重","RI","旋光值","結果","備註",""].map(head => <th key={head} style={tableHeadCellStyle}>{head}</th>)}</tr></thead>
+            <tbody>
+              {qualityRecords.map((row, index) => (
+                <tr key={row.batchNo + "-" + index}>
+                  {["materialName","batchNo","quantity","spec","inspQty","ph","density","ri","rotation","result","note"].map(field => (
+                    <td key={field} style={tableRowCellStyle}>
+                      <input value={row[field]} onChange={e => updateQualityRecord(index, field, e.target.value)} style={inputStyle} />
+                    </td>
+                  ))}
+                  <td style={tableRowCellStyle}><button onClick={() => setQualityRecords(prev => prev.filter((_, i) => i !== index))} style={buttonStyle("danger")}>刪除</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      <Panel
+        title="出貨單草稿產生"
+        description="依現有訂單與 LOT 資料產出 14.3 出貨單草稿。這一區適合先整理資料，再送出正式紀錄。"
+        accent="#a78bfa"
+        actions={<Badge color="#a78bfa">{shipmentLoading ? "載入中" : shipmentOrders.length + " 筆訂單"}</Badge>}
+      >
+
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))", gap:12 }}>
+          <div>
+            <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>訂單</div>
+            <select value={shipmentOrderNo} onChange={e => setShipmentOrderNo(e.target.value)} style={inputStyle}>
+              <option value="">請選擇訂單</option>
+              {shipmentOrders.map(item => <option key={item.order_no} value={item.order_no}>{item.order_no} - {item.product_name_suggested || item.source_product || "未命名"}</option>)}
+            </select>
+          </div>
+          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>日期</div><input type="date" value={shipmentForm.date} onChange={e => setShipmentForm(prev => ({ ...prev, date:e.target.value }))} style={inputStyle} /></div>
+          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>部門</div><input value={shipmentForm.department} onChange={e => setShipmentForm(prev => ({ ...prev, department:e.target.value }))} style={inputStyle} /></div>
+          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>申請人</div><input value={shipmentForm.requester} onChange={e => setShipmentForm(prev => ({ ...prev, requester:e.target.value }))} style={inputStyle} /></div>
+          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>產品</div><input value={shipmentForm.product_name} onChange={e => setShipmentForm(prev => ({ ...prev, product_name:e.target.value }))} style={inputStyle} /></div>
+          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>規格</div><input value={shipmentForm.spec} onChange={e => setShipmentForm(prev => ({ ...prev, spec:e.target.value }))} style={inputStyle} /></div>
+          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>數量</div><input value={shipmentForm.quantity} onChange={e => setShipmentForm(prev => ({ ...prev, quantity:e.target.value }))} style={inputStyle} /></div>
+          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>單位</div><input value={shipmentForm.unit} onChange={e => setShipmentForm(prev => ({ ...prev, unit:e.target.value }))} style={inputStyle} /></div>
+        </div>
+
+        <div style={{ marginTop:12 }}>
+          <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>訂單編號 / 批號顯示</div>
+          <input value={shipmentForm.batch_display} onChange={e => setShipmentForm(prev => ({ ...prev, batch_display:e.target.value }))} style={inputStyle} />
+        </div>
+
+        {selectedOrder && selectedOrder.lots && selectedOrder.lots.length > 0 && (
+          <div style={{ marginTop:14 }}>
+            <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:8 }}>批號清單</div>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              {selectedOrder.lots.map(item => {
+                const checked = selectedLots.includes(item.lot);
+                return (
+                  <label key={item.lot} style={{ display:"flex", alignItems:"center", gap:6, background:checked?"rgba(167,139,250,0.18)":"rgba(255,255,255,0.05)", border:"1px solid " + (checked ? "rgba(167,139,250,0.45)" : "rgba(255,255,255,0.12)"), borderRadius:999, padding:"6px 12px", cursor:"pointer", fontSize:12, color:"#e9d5ff" }}>
+                    <input type="checkbox" checked={checked} onChange={e => setSelectedLots(prev => e.target.checked ? [...prev, item.lot] : prev.filter(lot => lot !== item.lot))} />
+                    <span>{item.lot}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div style={{ marginTop:14 }}>
+          <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>備註</div>
+          <textarea value={shipmentForm.remark} onChange={e => setShipmentForm(prev => ({ ...prev, remark:e.target.value }))} style={{ ...inputStyle, minHeight:84, resize:"vertical" }} />
+        </div>
+
+        <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap", marginTop:16 }}>
+          <button onClick={generateShipmentDraft} disabled={shipmentBusy || shipmentLoading || !shipmentOrderNo} style={{ background:"linear-gradient(135deg,#7c3aed,#8b5cf6)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity:(shipmentBusy || shipmentLoading || !shipmentOrderNo) ? 0.6 : 1 }}>{shipmentBusy ? "產生中..." : "產生出貨單草稿"}</button>
+          {shipmentMessage && <div style={{ fontSize:12, color:"#ddd6fe" }}>{shipmentMessage}</div>}
+        </div>
+      </Panel>
+
+      <Panel
+        title="紀錄生成引擎"
+        description="先選模板，再用目前已有的生產、品質、環境、出貨或不符合資料產出草稿。這一版仍以規則帶值為主，不讓 AI 亂猜正式欄位。"
+        accent="#fb923c"
+        actions={<Badge color="#fb923c">{engineCatalog.length} 個模板</Badge>}
+        style={{ marginTop: 20 }}
+      >
+
+        <div style={{ display:"grid", gridTemplateColumns:"1.3fr 1fr", gap:12, alignItems:"end" }}>
+          <div>
+            <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>需求提示</div>
+            <textarea value={enginePrompt} onChange={e => setEnginePrompt(e.target.value)} placeholder="例如：請用目前出貨資料產生出貨流程紀錄，或把不符合資料整理成 CIP 紀錄。" style={{ ...inputStyle, minHeight:80, resize:"vertical" }} />
+          </div>
+          <div>
+            <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>模板</div>
+            <select value={engineTemplateCode} onChange={e => setEngineTemplateCode(e.target.value)} style={inputStyle}>
+              {engineCatalog.map(item => <option key={item.code} value={item.code}>{item.title}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {engineSuggestions.length > 0 && (
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:12 }}>
+            {engineSuggestions.map(item => (
+              <button key={item.code} onClick={() => setEngineTemplateCode(item.code)} style={{ background:item.code === engineTemplateCode ? "rgba(249,115,22,0.22)" : "rgba(255,255,255,0.06)", border:"1px solid rgba(249,115,22,0.24)", borderRadius:999, color:"#ffedd5", cursor:"pointer", padding:"6px 12px", fontSize:12 }}>
+                {item.title}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {engineTemplateCode === "cip_152" && (
+          <div style={{ marginTop:12 }}>
+            <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>不符合來源</div>
+            <select value={selectedNcId} onChange={e => setSelectedNcId(e.target.value)} style={inputStyle}>
+              {(nonConformances || []).map(item => <option key={item.id} value={item.id}>{item.id} - {item.description}</option>)}
+            </select>
+          </div>
+        )}
+
+        <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap", marginTop:16 }}>
+          <button onClick={suggestRecordTemplates} disabled={engineBusy} style={{ background:"linear-gradient(135deg,#b45309,#f97316)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity:engineBusy ? 0.6 : 1 }}>{engineBusy ? "分析中..." : "分析建議模板"}</button>
+          <button onClick={generateEngineRecord} disabled={engineBusy || !engineTemplateCode} style={{ background:"linear-gradient(135deg,#c2410c,#ea580c)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity:(engineBusy || !engineTemplateCode) ? 0.6 : 1 }}>{engineBusy ? "產生中..." : "產生紀錄草稿"}</button>
+          {engineMessage && <div style={{ fontSize:12, color:"#ffedd5" }}>{engineMessage}</div>}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function NotificationTab({ instruments, documents, equipment, suppliers, nonConformances, auditPlans }) {
+  const items = collectNotificationItems({ instruments, documents, equipment, suppliers, nonConformances, auditPlans });
+  const [googleStatus, setGoogleStatus] = useState({ configured: false, connected: false, email: "", redirect_uri: "" });
+  const [googleForm, setGoogleForm] = useState({ client_id: "", client_secret: "" });
+  const [googleBusy, setGoogleBusy] = useState("");
+  const [googleMessage, setGoogleMessage] = useState("");
+  const [notionForm, setNotionForm] = useState({ token: "", db_id: "" });
+  const [notionBusyKey, setNotionBusyKey] = useState("");
+  const [notionMessage, setNotionMessage] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadStatus() {
+      try {
+        const response = await fetch("/api/google-calendar/status");
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
+        if (!cancelled) setGoogleStatus(payload);
+      } catch (err) {
+        if (!cancelled) setGoogleMessage("讀取 Google 行事曆狀態失敗: " + err.message);
+      }
+    }
+    loadStatus();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const googleState = params.get("google");
+    if (!googleState) return;
+    const reason = params.get("reason");
+    setGoogleMessage(googleState === "connected" ? "Google 行事曆已完成授權。" : "Google 授權失敗: " + (reason || "unknown"));
+    params.delete("google");
+    params.delete("reason");
+    params.set("tab", "notification");
+    const next = window.location.pathname + "?" + params.toString();
+    window.history.replaceState({}, "", next);
+  }, []);
+
+  async function refreshGoogleStatus() {
+    const response = await fetch("/api/google-calendar/status");
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
+    setGoogleStatus(payload);
+  }
+
+  async function saveGoogleConfig() {
+    setGoogleBusy("config");
+    setGoogleMessage("");
+    try {
+      const response = await fetch("/api/google-calendar/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(googleForm),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
+      setGoogleStatus(payload);
+      setGoogleMessage("Google Calendar 設定已儲存。");
+      setGoogleForm(prev => ({ ...prev, client_secret: "" }));
+    } catch (err) {
+      setGoogleMessage("Google Calendar 設定失敗: " + err.message);
+    } finally {
+      setGoogleBusy("");
+    }
+  }
+
+  async function startGoogleAuth() {
+    setGoogleBusy("auth");
+    setGoogleMessage("");
+    try {
+      const response = await fetch("/api/google-calendar/auth/start");
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
+      window.location.href = payload.auth_url;
+    } catch (err) {
+      setGoogleMessage("啟動 Google 授權失敗: " + err.message);
+      setGoogleBusy("");
+    }
+  }
+
+  async function logoutGoogle() {
+    setGoogleBusy("logout");
+    setGoogleMessage("");
+    try {
+      const response = await fetch("/api/google-calendar/logout", { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
+      setGoogleStatus(payload);
+      setGoogleMessage("Google 行事曆已中斷連線。");
+    } catch (err) {
+      setGoogleMessage("中斷 Google 行事曆失敗: " + err.message);
+    } finally {
+      setGoogleBusy("");
+    }
+  }
+
+  async function createGoogleEvents(batchItems, mode) {
+    if (!batchItems.length) {
+      setGoogleMessage("目前沒有可建立的提醒項目。");
+      return;
+    }
+    setGoogleBusy(mode);
+    setGoogleMessage("");
+    try {
+      const response = await fetch("/api/google-calendar/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: batchItems }),
+      });
+      const payload = await response.json();
+      if (!response.ok && response.status !== 207) throw new Error(payload.error || ("HTTP " + response.status));
+      const detail = (payload.results || []).filter(result => !result.success).map(result => result.title + ": " + result.error).join("；");
+      setGoogleMessage(`Google 行事曆建立完成，成功 ${payload.success_count || 0} 筆，失敗 ${payload.failed_count || 0} 筆。${detail ? " 失敗明細：" + detail : ""}`);
+      await refreshGoogleStatus();
+    } catch (err) {
+      setGoogleMessage("建立 Google 行事曆事件失敗: " + err.message);
+    } finally {
+      setGoogleBusy("");
+    }
+  }
+
+  async function sendToNotion(item) {
+    if (!notionForm.token || !notionForm.db_id) {
+      setNotionMessage("請先輸入 Notion Token 與 Database ID。");
+      return;
+    }
+    setNotionBusyKey(item.key);
+    setNotionMessage("");
+    try {
+      const response = await fetch("/api/notion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: notionForm.token,
+          db_id: notionForm.db_id,
+          properties: {
+            Name: { title: [{ text: { content: item.title } }] },
+            Module: { rich_text: [{ text: { content: item.module } }] },
+            Date: { date: { start: item.date } },
+            Owner: { rich_text: [{ text: { content: item.owner || "" } }] },
+            Summary: { rich_text: [{ text: { content: item.summary || "" } }] },
+          },
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || payload.message || JSON.stringify(payload));
+      setNotionMessage("已送出至 Notion: " + item.title);
+    } catch (err) {
+      setNotionMessage("Notion 建立失敗: " + err.message);
+    } finally {
+      setNotionBusyKey("");
+    }
+  }
+
+  function openMailDraft(item) {
+    const subject = encodeURIComponent(item.title);
+    const body = encodeURIComponent([
+      "日期: " + formatDate(item.date),
+      "模組: " + item.module,
+      "摘要: " + item.summary,
+      "負責人: " + (item.owner || "未指定"),
+    ].join("\n"));
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  }
+
+  const overdueCount = items.filter(item => item.days < 0).length;
+  const thisWeekCount = items.filter(item => item.days >= 0 && item.days <= 7).length;
+  const moduleCounts = items.reduce((acc, item) => {
+    acc[item.module] = (acc[item.module] || 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <div>
+      <SectionHeader title="通知提醒" count={items.length} color="#f59e0b" />
+      <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap" }}>
+        <StatCard label="提醒總數" value={items.length} color="#f59e0b" sub="30 天內需處理" />
+        <StatCard label="已逾期" value={overdueCount} color="#ef4444" sub="優先處理" />
+        <StatCard label="7 天內" value={thisWeekCount} color="#f97316" sub="近期排程" />
+        <StatCard label="Google 狀態" value={googleStatus.connected ? "已連線" : googleStatus.configured ? "待授權" : "未設定"} color={googleStatus.connected ? "#22c55e" : googleStatus.configured ? "#eab308" : "#64748b"} sub={googleStatus.email || "primary calendar"} />
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"minmax(320px, 1.1fr) minmax(320px, 0.9fr)", gap:16, marginBottom:20 }}>
+        <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:14, padding:18 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap", marginBottom:12 }}>
+            <div>
+              <div style={{ fontSize:15, fontWeight:700, color:"#fef3c7" }}>Google 行事曆</div>
+              <div style={{ fontSize:12, color:"#fcd34d", marginTop:4 }}>支援單筆或批次寫入 primary calendar。</div>
+            </div>
+            <Badge color={googleStatus.connected ? "#22c55e" : googleStatus.configured ? "#eab308" : "#94a3b8"}>{googleStatus.connected ? "已授權" : googleStatus.configured ? "待授權" : "未設定"}</Badge>
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:12 }}>
+            <div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>Google Client ID</div>
+              <input value={googleForm.client_id} onChange={e => setGoogleForm(prev => ({ ...prev, client_id: e.target.value }))} placeholder="貼上 Google OAuth Client ID" style={inputStyle} />
+            </div>
+            <div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>Google Client Secret</div>
+              <input type="password" value={googleForm.client_secret} onChange={e => setGoogleForm(prev => ({ ...prev, client_secret: e.target.value }))} placeholder="貼上 Google OAuth Client Secret" style={inputStyle} />
+            </div>
+            <div style={{ fontSize:11, color:"#94a3b8", lineHeight:1.6 }}>
+              Redirect URI: <span style={{ color:"#e2e8f0", fontFamily:"monospace" }}>{googleStatus.redirect_uri || "讀取中"}</span>
+            </div>
+          </div>
+
+          <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:14 }}>
+            <button onClick={saveGoogleConfig} disabled={googleBusy !== ""} style={{ background:"linear-gradient(135deg,#b45309,#f59e0b)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity: googleBusy ? 0.6 : 1 }}>{googleBusy === "config" ? "儲存中..." : "儲存設定"}</button>
+            <button onClick={startGoogleAuth} disabled={googleBusy !== "" || !googleStatus.configured} style={{ background:"linear-gradient(135deg,#1d4ed8,#3b82f6)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity: (googleBusy || !googleStatus.configured) ? 0.6 : 1 }}>{googleBusy === "auth" ? "連線中..." : "連線 Google"}</button>
+            <button onClick={() => createGoogleEvents(items, "batch")} disabled={googleBusy !== "" || !items.length} style={{ background:"linear-gradient(135deg,#0369a1,#0ea5e9)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity: (googleBusy || !items.length) ? 0.6 : 1 }}>{googleBusy === "batch" ? "建立中..." : "全部建立 Google 事件"}</button>
+            <button onClick={logoutGoogle} disabled={googleBusy !== "" || !googleStatus.connected} style={{ background:"rgba(239,68,68,0.14)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:10, color:"#fca5a5", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity: (googleBusy || !googleStatus.connected) ? 0.6 : 1 }}>{googleBusy === "logout" ? "處理中..." : "中斷連線"}</button>
+          </div>
+          {googleMessage && <div style={{ marginTop:12, fontSize:12, color:"#fde68a", lineHeight:1.6 }}>{googleMessage}</div>}
+        </div>
+
+        <div style={{ background:"rgba(99,102,241,0.08)", border:"1px solid rgba(99,102,241,0.2)", borderRadius:14, padding:18 }}>
+          <div style={{ marginBottom:12 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:"#e0e7ff" }}>Notion 與其他提醒方式</div>
+            <div style={{ fontSize:12, color:"#c7d2fe", marginTop:4 }}>可逐筆送到 Notion，或退回用 Email / Google 建立頁。</div>
+          </div>
+
+          <div style={{ display:"grid", gap:12 }}>
+            <div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>Notion Token</div>
+              <input type="password" value={notionForm.token} onChange={e => setNotionForm(prev => ({ ...prev, token: e.target.value }))} placeholder="secret_xxx" style={inputStyle} />
+            </div>
+            <div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>Notion Database ID</div>
+              <input value={notionForm.db_id} onChange={e => setNotionForm(prev => ({ ...prev, db_id: e.target.value }))} placeholder="貼上 Notion Database ID" style={inputStyle} />
+            </div>
+          </div>
+          <div style={{ marginTop:14, fontSize:12, color:"#a5b4fc", lineHeight:1.7 }}>
+            預設會寫入 `Name / Module / Date / Owner / Summary` 五個欄位。若你的資料庫欄位名稱不同，Notion 會直接回傳錯誤，畫面會顯示原始訊息。
+          </div>
+          {notionMessage && <div style={{ marginTop:12, fontSize:12, color:"#c7d2fe", lineHeight:1.6 }}>{notionMessage}</div>}
+          <div style={{ marginTop:16 }}>
+            <div style={{ fontSize:13, color:"#e2e8f0", fontWeight:700, marginBottom:8 }}>模組分布</div>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              {Object.entries(moduleCounts).map(([module, count]) => (
+                <Badge key={module} color="#818cf8">{module} x {count}</Badge>
+              ))}
+              {items.length === 0 && <span style={{ fontSize:12, color:"#94a3b8" }}>目前沒有需要通知的資料。</span>}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+        {items.map(item => (
+          <div key={item.key} style={{ background: urgencyBg(item.days), border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:16 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", gap:12, flexWrap:"wrap", alignItems:"flex-start" }}>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+                  <div style={{ fontSize:15, fontWeight:700, color:"#e2e8f0" }}>{item.title}</div>
+                  <Badge color={urgencyColor(item.days)}>{item.statusText}</Badge>
+                  <Badge color="#60a5fa">{item.module}</Badge>
+                </div>
+                <div style={{ fontSize:13, color:"#cbd5e1", lineHeight:1.6 }}>{item.summary}</div>
+                <div style={{ fontSize:12, color:"#94a3b8" }}>
+                  日期 {formatDate(item.date)} {item.owner ? " / 負責人 " + item.owner : ""}
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+                <button onClick={() => createGoogleEvents([item], "single:" + item.key)} disabled={googleBusy !== ""} style={{ background:"linear-gradient(135deg,#0369a1,#0ea5e9)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"9px 14px", fontSize:12, fontWeight:700, opacity: googleBusy ? 0.6 : 1 }}>{googleBusy === "single:" + item.key ? "建立中..." : "建立 Google 事件"}</button>
+                <button onClick={() => window.open(buildCalendarLink(item), "_blank", "noopener,noreferrer")} style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.16)", borderRadius:10, color:"#e2e8f0", cursor:"pointer", padding:"9px 14px", fontSize:12, fontWeight:700 }}>開啟建立頁</button>
+                <button onClick={() => sendToNotion(item)} disabled={notionBusyKey !== ""} style={{ background:"rgba(99,102,241,0.16)", border:"1px solid rgba(99,102,241,0.32)", borderRadius:10, color:"#c7d2fe", cursor:"pointer", padding:"9px 14px", fontSize:12, fontWeight:700, opacity: notionBusyKey ? 0.6 : 1 }}>{notionBusyKey === item.key ? "送出中..." : "送到 Notion"}</button>
+                <button onClick={() => openMailDraft(item)} style={{ background:"rgba(245,158,11,0.14)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, color:"#fde68a", cursor:"pointer", padding:"9px 14px", fontSize:12, fontWeight:700 }}>Email 草稿</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AIWorkbenchTab({ documents, manuals, nonConformances }) {
+  const sources = [...documents, ...manuals]
+    .map(item => ({
+      id: item.id,
+      name: item.name,
+      department: item.department || "",
+      version: item.version || "",
+      path: item.docxPath || item.pdfPath || "",
+    }))
+    .filter(item => item.path)
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const sourceMetadata = sources.reduce((acc, item) => {
+    acc[item.path] = {
+      title: item.name,
+      document_code: item.id,
+      owner_dept: item.department,
+      version: item.version,
+      source_system: "iso_local_library",
+    };
+    return acc;
+  }, {});
+
+  const [apiBase, setApiBase] = useState(() => loadStoredState("audit_v2_api_base", "http://127.0.0.1:8890/api/v2"));
+  const [serviceInfo, setServiceInfo] = useState({ service: "auto-audit-v2", database_mode: "unknown", openrouter_enabled: false });
+  const [serviceMessage, setServiceMessage] = useState("");
+  const [cacheBusy, setCacheBusy] = useState(false);
+  const [cacheStatus, setCacheStatus] = useState({ compare_cache_count: 0, audit_cache_count: 0 });
+  const [ingestBusy, setIngestBusy] = useState(false);
+  const [ingestMessage, setIngestMessage] = useState("");
+  const [ingestResult, setIngestResult] = useState(null);
+  const [selectedPath, setSelectedPath] = useState(sources[0]?.path || "");
+  const [compareMode, setCompareMode] = useState("generic");
+  const [compareUseLlm, setCompareUseLlm] = useState(false);
+  const [compareLeftPath, setCompareLeftPath] = useState(sources[0]?.path || "");
+  const [compareRightPath, setCompareRightPath] = useState(sources[1]?.path || sources[0]?.path || "");
+  const [compareBusy, setCompareBusy] = useState(false);
+  const [compareExportBusy, setCompareExportBusy] = useState(false);
+  const [compareDocxExportBusy, setCompareDocxExportBusy] = useState(false);
+  const [compareResult, setCompareResult] = useState(null);
+  const [compareMessage, setCompareMessage] = useState("");
+  const [versionCandidatesBusy, setVersionCandidatesBusy] = useState(false);
+  const [versionCandidates, setVersionCandidates] = useState([]);
+  const [auditBusy, setAuditBusy] = useState(false);
+  const [auditExportBusy, setAuditExportBusy] = useState(false);
+  const [auditResult, setAuditResult] = useState(null);
+  const [auditMessage, setAuditMessage] = useState("");
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [historyMode, setHistoryMode] = useState("all");
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [historyItems, setHistoryItems] = useState([]);
+  const [historyMessage, setHistoryMessage] = useState("");
+  const [searchQuery, setSearchQuery] = useState("核准 版次 保存");
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [qaQuestion, setQaQuestion] = useState("文件化資訊管制程序對保存與核准有什麼要求？");
+  const [qaScope, setQaScope] = useState("selected");
+  const [qaBusy, setQaBusy] = useState(false);
+  const [qaResult, setQaResult] = useState(null);
+  const [qaMessage, setQaMessage] = useState("");
+  const [spcBusy, setSpcBusy] = useState(false);
+  const [spcResult, setSpcResult] = useState(null);
+  const [spcMessage, setSpcMessage] = useState("");
+  const [spcForm, setSpcForm] = useState({
+    parameter_name: "Thickness",
+    csv_text: "10.1,10.0,9.9,10.2,10.1",
+    lsl: "9.5",
+    usl: "10.5",
+    target: "10.0",
+  });
+  const [deviationBusy, setDeviationBusy] = useState(false);
+  const [deviationResult, setDeviationResult] = useState(null);
+  const [deviationMessage, setDeviationMessage] = useState("");
+  const [deviationForm, setDeviationForm] = useState(() => ({
+    issue_description: nonConformances[0]?.description || "",
+    process_step: "AOI 檢驗",
+    lot_no: "LOT-20260301-A",
+    severity: "medium",
+  }));
+
+  useEffect(() => {
+    saveStoredState("audit_v2_api_base", apiBase);
+  }, [apiBase]);
+
+  useEffect(() => {
+    setVersionCandidates([]);
+    if (compareMode === "version") {
+      setCompareRightPath("");
+    }
+  }, [compareLeftPath, compareMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadHealth() {
+      try {
+        const payload = await callV2("/health");
+        if (!cancelled) {
+          setServiceInfo(payload.data || {});
+          setServiceMessage("");
+        }
+        const cachePayload = await callV2("/cache/status");
+        if (!cancelled) {
+          setCacheStatus(cachePayload.data || {});
+        }
+        const historyPayload = await callV2("/history/runs?mode=all&limit=12");
+        if (!cancelled) {
+          setHistoryItems(historyPayload.data?.items || []);
+          setHistoryMessage("");
+        }
+      } catch (err) {
+        if (!cancelled) setServiceMessage("V2 服務尚未就緒: " + err.message);
+      }
+    }
+    loadHealth();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBase]);
+
+  async function callV2(path, options = {}) {
+    const response = await fetch(apiBase + path, options);
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || payload.error || ("HTTP " + response.status));
+    if (!payload.success) throw new Error(payload.message || payload.error_code || "V2 request failed");
+    return payload;
+  }
+
+  async function runDocumentAudit() {
+    if (!selectedPath) {
+      setAuditMessage("請先選擇文件。");
+      return;
+    }
+    setAuditBusy(true);
+    setAuditMessage("");
+    try {
+      const payload = await callV2("/documents/audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: selectedPath }),
+      });
+      setAuditResult(payload.data);
+      setAuditMessage("文件稽核完成。");
+      loadHistory(historyMode, historyQuery);
+    } catch (err) {
+      setAuditMessage("文件稽核失敗: " + err.message);
+    } finally {
+      setAuditBusy(false);
+    }
+  }
+
+  async function exportDocumentAuditWordReport() {
+    if (!selectedPath) {
+      setAuditMessage("請先選擇文件。");
+      return;
+    }
+    setAuditExportBusy(true);
+    setAuditMessage("");
+    try {
+      const response = await fetch(apiBase + "/documents/audit/export/docx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: selectedPath }),
+      });
+      if (!response.ok) {
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch (err) {
+          payload = null;
+        }
+        throw new Error(payload?.message || ("HTTP " + response.status));
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "document_audit_report.docx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setAuditMessage("AI 文件稽核 Word 報告已下載。");
+      loadHistory(historyMode, historyQuery);
+    } catch (err) {
+      setAuditMessage("AI 文件稽核 Word 報告下載失敗: " + err.message);
+    } finally {
+      setAuditExportBusy(false);
+    }
+  }
+
+  async function runDocumentCompare() {
+    if (!compareLeftPath || !compareRightPath) {
+      setCompareMessage("請先選擇左右兩份文件。");
+      return;
+    }
+    setCompareBusy(true);
+    setCompareMessage("");
+    try {
+      const payload = await callV2("/documents/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ left_path: compareLeftPath, right_path: compareRightPath, use_llm: compareUseLlm }),
+      });
+      setCompareResult(payload.data);
+      setCompareMessage("文件差異比對完成。");
+      loadHistory(historyMode, historyQuery);
+    } catch (err) {
+      setCompareMessage("文件差異比對失敗: " + err.message);
+    } finally {
+      setCompareBusy(false);
+    }
+  }
+
+  async function loadVersionCandidates() {
+    if (!compareLeftPath) {
+      setCompareMessage("請先選擇基準文件。");
+      return;
+    }
+    setVersionCandidatesBusy(true);
+    setCompareMessage("");
+    try {
+      const payload = await callV2("/documents/version-candidates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: compareLeftPath, limit: 12 }),
+      });
+      const candidates = payload.data?.candidates || [];
+      setVersionCandidates(candidates);
+      if (candidates[0]?.path) {
+        setCompareRightPath(candidates[0].path);
+      }
+      setCompareMessage(candidates.length ? "已載入同文件版次候選。" : "找不到明顯的同文件版次候選。");
+    } catch (err) {
+      setCompareMessage("版次候選搜尋失敗: " + err.message);
+    } finally {
+      setVersionCandidatesBusy(false);
+    }
+  }
+
+  async function exportDocumentCompareReport() {
+    if (!compareLeftPath || !compareRightPath) {
+      setCompareMessage("請先選擇左右兩份文件。");
+      return;
+    }
+    setCompareExportBusy(true);
+    setCompareMessage("");
+    try {
+      const response = await fetch(apiBase + "/documents/compare/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ left_path: compareLeftPath, right_path: compareRightPath, use_llm: compareUseLlm }),
+      });
+      if (!response.ok) {
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch (err) {
+          payload = null;
+        }
+        throw new Error(payload?.message || ("HTTP " + response.status));
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "document_compare_report.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setCompareMessage("缺漏比對報告已下載。");
+      loadHistory(historyMode, historyQuery);
+    } catch (err) {
+      setCompareMessage("缺漏比對報告下載失敗: " + err.message);
+    } finally {
+      setCompareExportBusy(false);
+    }
+  }
+
+  async function exportDocumentCompareWordReport() {
+    if (!compareLeftPath || !compareRightPath) {
+      setCompareMessage("請先選擇左右兩份文件。");
+      return;
+    }
+    setCompareDocxExportBusy(true);
+    setCompareMessage("");
+    try {
+      const response = await fetch(apiBase + "/documents/compare/export/docx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ left_path: compareLeftPath, right_path: compareRightPath, use_llm: compareUseLlm }),
+      });
+      if (!response.ok) {
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch (err) {
+          payload = null;
+        }
+        throw new Error(payload?.message || ("HTTP " + response.status));
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "document_compare_report.docx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setCompareMessage("Word 比對報告已下載。");
+      loadHistory(historyMode, historyQuery);
+    } catch (err) {
+      setCompareMessage("Word 比對報告下載失敗: " + err.message);
+    } finally {
+      setCompareDocxExportBusy(false);
+    }
+  }
+
+  async function ingestPaths(paths) {
+    if (!paths.length) {
+      setIngestMessage("目前沒有可匯入的文件。");
+      return;
+    }
+    setIngestBusy(true);
+    setIngestMessage("");
+    try {
+      const payload = await callV2("/documents/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paths,
+          metadata: paths.reduce((acc, path) => {
+            acc[path] = sourceMetadata[path] || {};
+            return acc;
+          }, {}),
+        }),
+      });
+      setIngestResult(payload.data);
+      setIngestMessage(`已完成 ${payload.data.ingested_count} 份文件匯入，失敗 ${payload.data.failed_count || 0} 份。`);
+      const healthPayload = await callV2("/health");
+      setServiceInfo(healthPayload.data || {});
+      const cachePayload = await callV2("/cache/status");
+      setCacheStatus(cachePayload.data || {});
+    } catch (err) {
+      setIngestMessage("批次匯入失敗: " + err.message);
+    } finally {
+      setIngestBusy(false);
+    }
+  }
+
+  async function clearRuntimeCache(target) {
+    setCacheBusy(true);
+    setServiceMessage("");
+    try {
+      const payload = await callV2("/cache/clear?target=" + encodeURIComponent(target), { method: "POST" });
+      const cachePayload = await callV2("/cache/status");
+      setCacheStatus(cachePayload.data || {});
+      setCompareResult(prev => prev ? { ...prev, cache_hit: false } : prev);
+      setAuditResult(prev => prev ? { ...prev, cache_hit: false } : prev);
+      setServiceMessage(`已清除 ${payload.data.deleted_compare_cache || 0} 筆文件比對快取、${payload.data.deleted_audit_cache || 0} 筆文件稽核快取。`);
+    } catch (err) {
+      setServiceMessage("快取清理失敗: " + err.message);
+    } finally {
+      setCacheBusy(false);
+    }
+  }
+
+  async function loadHistory(mode = historyMode, query = historyQuery) {
+    setHistoryBusy(true);
+    setHistoryMessage("");
+    try {
+      const payload = await callV2("/history/runs?mode=" + encodeURIComponent(mode) + "&q=" + encodeURIComponent(query.trim()) + "&limit=20");
+      setHistoryItems(payload.data?.items || []);
+      setHistoryMessage((payload.data?.items || []).length ? "已載入結果歷史。" : "目前查無符合條件的歷史紀錄。");
+    } catch (err) {
+      setHistoryMessage("結果歷史讀取失敗: " + err.message);
+    } finally {
+      setHistoryBusy(false);
+    }
+  }
+
+  async function runSearch() {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    setSearchBusy(true);
+    setServiceMessage("");
+    try {
+      const payload = await callV2("/documents/search?q=" + encodeURIComponent(searchQuery.trim()) + "&limit=8");
+      setSearchResults(payload.data?.hits || []);
+    } catch (err) {
+      setServiceMessage("文件搜尋失敗: " + err.message);
+    } finally {
+      setSearchBusy(false);
+    }
+  }
+
+  async function runKnowledgeQA() {
+    if (!qaQuestion.trim()) {
+      setQaMessage("請先輸入問題。");
+      return;
+    }
+    setQaBusy(true);
+    setQaMessage("");
+    try {
+      const qaPayload = { question: qaQuestion.trim(), limit: 5 };
+      if (qaScope === "selected" && selectedPath) {
+        qaPayload.path = selectedPath;
+      }
+      const payload = await callV2("/knowledge/qa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(qaPayload),
+      });
+      setQaResult(payload.data);
+      setQaMessage("文件知識問答完成。");
+    } catch (err) {
+      setQaMessage("文件知識問答失敗: " + err.message);
+    } finally {
+      setQaBusy(false);
+    }
+  }
+
+  async function runSpcAnalyze() {
+    setSpcBusy(true);
+    setSpcMessage("");
+    try {
+      const payload = await callV2("/spc/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          parameter_name: spcForm.parameter_name,
+          csv_text: spcForm.csv_text,
+          lsl: spcForm.lsl === "" ? null : Number(spcForm.lsl),
+          usl: spcForm.usl === "" ? null : Number(spcForm.usl),
+          target: spcForm.target === "" ? null : Number(spcForm.target),
+        }),
+      });
+      setSpcResult(payload.data);
+      setSpcMessage("SPC 摘要完成。");
+    } catch (err) {
+      setSpcMessage("SPC 摘要失敗: " + err.message);
+    } finally {
+      setSpcBusy(false);
+    }
+  }
+
+  async function runDeviationDraft() {
+    setDeviationBusy(true);
+    setDeviationMessage("");
+    try {
+      const payload = await callV2("/deviations/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(deviationForm),
+      });
+      setDeviationResult(payload.data);
+      setDeviationMessage("異常草稿完成。");
+    } catch (err) {
+      setDeviationMessage("異常草稿失敗: " + err.message);
+    } finally {
+      setDeviationBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <PageIntro
+        eyebrow="AI Assisted QMS"
+        title="AI 工作台（V2）"
+        description="這一頁負責 AI 相關任務：文件稽核、文件比對、知識問答、SPC 摘要與異常草稿。建議先確認服務狀態，再進入個別任務區。"
+      >
+        <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+          <StatCard label="文件來源" value={sources.length} color="#38bdf8" sub="可直接送入文件稽核" />
+          <StatCard label="資料庫模式" value={serviceInfo.database_mode || "unknown"} color={serviceInfo.database_mode === "postgresql" ? "#22c55e" : "#f59e0b"} sub={(serviceInfo.database_status && serviceInfo.database_status.using_fallback) ? "已退回 SQLite" : "正式資料庫已接線"} />
+          <StatCard label="LLM 狀態" value={serviceInfo.openrouter_enabled ? "已啟用" : "未啟用"} color={serviceInfo.openrouter_enabled ? "#22c55e" : "#64748b"} sub="規則引擎仍可獨立運作" />
+        </div>
+      </PageIntro>
+
+      <Panel
+        title="服務狀態與資料準備"
+        description="先確認 V2 服務、資料庫與快取狀態。需要時可重新匯入文件，或清除快取後再重跑。"
+        accent="#38bdf8"
+        style={{ marginBottom: 18 }}
+      >
+        <div style={{ display:"grid", gridTemplateColumns:"1.2fr 0.8fr", gap:12, alignItems:"end" }}>
+          <div>
+            <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>V2 API Base URL</div>
+            <input value={apiBase} onChange={e => setApiBase(e.target.value.trim())} style={inputStyle} />
+          </div>
+          <button onClick={runSearch} disabled={searchBusy} style={buttonStyle("primary", searchBusy)}>{searchBusy ? "搜尋中..." : "測試文件搜尋"}</button>
+        </div>
+        <div style={{ marginTop:10, fontSize:12, color: serviceMessage ? "#fca5a5" : "#7dd3fc" }}>
+          {serviceMessage || "V2 服務健康檢查已接線，預設使用 http://127.0.0.1:8890/api/v2。"}
+        </div>
+        {serviceInfo.database_status && (
+          <div style={{ marginTop:8, fontSize:12, color:"#cbd5e1", lineHeight:1.7 }}>
+            目前資料庫：{serviceInfo.database_status.active_database_url || "unknown"}
+            {serviceInfo.database_status.using_fallback && serviceInfo.database_status.fallback_reason ? "；PostgreSQL 啟用失敗，原因：" + serviceInfo.database_status.fallback_reason : ""}
+          </div>
+        )}
+        <div style={{ marginTop:10, display:"flex", gap:8, flexWrap:"wrap" }}>
+          <Badge color="#14b8a6">比對快取 {cacheStatus.compare_cache_count || 0}</Badge>
+          <Badge color="#38bdf8">稽核快取 {cacheStatus.audit_cache_count || 0}</Badge>
+          {cacheStatus.latest_compare_cache_at && <Badge color="#64748b">比對快取更新 {cacheStatus.latest_compare_cache_at.slice(0, 19).replace("T", " ")}</Badge>}
+          {cacheStatus.latest_audit_cache_at && <Badge color="#64748b">稽核快取更新 {cacheStatus.latest_audit_cache_at.slice(0, 19).replace("T", " ")}</Badge>}
+        </div>
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:12 }}>
+          <button onClick={() => ingestPaths(sources.map(item => item.path))} disabled={ingestBusy || sources.length === 0} style={buttonStyle("success", ingestBusy || sources.length === 0)}>{ingestBusy ? "匯入中..." : "匯入全部 ISO 文件"}</button>
+          <button onClick={() => ingestPaths(selectedPath ? [selectedPath] : [])} disabled={ingestBusy || !selectedPath} style={buttonStyle("secondary", ingestBusy || !selectedPath)}>只匯入目前選中文件</button>
+          <button onClick={() => clearRuntimeCache("all")} disabled={cacheBusy} style={buttonStyle("danger", cacheBusy)}>{cacheBusy ? "清理中..." : "清除全部快取"}</button>
+          <button onClick={() => clearRuntimeCache("compare")} disabled={cacheBusy} style={buttonStyle("warning", cacheBusy)}>只清比對快取</button>
+          <button onClick={() => clearRuntimeCache("audit")} disabled={cacheBusy} style={buttonStyle("secondary", cacheBusy)}>只清稽核快取</button>
+          {ingestMessage && <div style={{ fontSize:12, color:"#99f6e4", alignSelf:"center" }}>{ingestMessage}</div>}
+        </div>
+        {ingestResult && (
+          <div style={{ marginTop:12, fontSize:12, color:"#cbd5e1", lineHeight:1.7 }}>
+            已建立/更新 {ingestResult.ingested_count} 份文件，失敗 {ingestResult.failed_count || 0} 份，最近一次匯入首筆為 {ingestResult.documents?.[0]?.title || "n/a"}。
+          </div>
+        )}
+      </Panel>
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))", gap:16 }}>
+        <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:18 }}>
+          <div style={{ fontSize:15, fontWeight:700, color:"#e2e8f0", marginBottom:12 }}>AI 文件稽核</div>
+          <div style={{ fontSize:12, color:"#94a3b8", marginBottom:10 }}>選擇既有 SOP / 程序 / 三階文件，直接送入 V2 規則稽核。</div>
+          <select value={selectedPath} onChange={e => setSelectedPath(e.target.value)} style={inputStyle}>
+            {sources.map(item => (
+              <option key={item.id} value={item.path}>{item.id}｜{item.name}</option>
+            ))}
+          </select>
+          <div style={{ display:"flex", gap:10, marginTop:12, flexWrap:"wrap" }}>
+            <button onClick={runDocumentAudit} disabled={auditBusy || !selectedPath} style={{ background:"linear-gradient(135deg,#2563eb,#38bdf8)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity:(auditBusy || !selectedPath) ? 0.6 : 1 }}>{auditBusy ? "稽核中..." : "執行文件稽核"}</button>
+            <button onClick={exportDocumentAuditWordReport} disabled={auditExportBusy || !selectedPath} style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.14)", borderRadius:10, color:"#e2e8f0", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity:(auditExportBusy || !selectedPath) ? 0.6 : 1 }}>{auditExportBusy ? "匯出中..." : "下載稽核 Word 報告"}</button>
+          </div>
+          {auditMessage && <div style={{ marginTop:10, fontSize:12, color:"#bae6fd" }}>{auditMessage}</div>}
+          {auditResult && (
+            <div style={{ marginTop:14, display:"flex", flexDirection:"column", gap:10 }}>
+              <div style={{ fontSize:13, color:"#e2e8f0", lineHeight:1.7 }}>{auditResult.summary}</div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                <Badge color="#60a5fa">prompt {auditResult.prompt_version}</Badge>
+                <Badge color={auditResult.needs_human_review ? "#f59e0b" : "#22c55e"}>{auditResult.needs_human_review ? "需人工覆核" : "可直接採用"}</Badge>
+                {typeof auditResult.cache_hit === "boolean" && <Badge color={auditResult.cache_hit ? "#14b8a6" : "#64748b"}>{auditResult.cache_hit ? "命中快取" : "即時計算"}</Badge>}
+              </div>
+              <div>
+                <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>問題清單</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {(auditResult.issues || []).map(item => (
+                    <div key={item.code} style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.18)", borderRadius:10, padding:"10px 12px" }}>
+                      <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:4 }}>
+                        <Badge color={item.severity === "high" ? "#ef4444" : "#f59e0b"}>{item.severity}</Badge>
+                        <span style={{ fontSize:13, color:"#fecaca", fontWeight:700 }}>{item.title}</span>
+                      </div>
+                      <div style={{ fontSize:12, color:"#fca5a5" }}>{item.description}</div>
+                    </div>
+                  ))}
+                  {(!auditResult.issues || auditResult.issues.length === 0) && <div style={{ fontSize:12, color:"#4ade80" }}>目前規則檢查未發現必要章節缺漏。</div>}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>引用片段</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {(auditResult.citations || []).map((item, idx) => (
+                    <div key={idx} style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, padding:"10px 12px" }}>
+                      <div style={{ fontSize:12, color:"#7dd3fc", marginBottom:4 }}>{item.title}</div>
+                      <div style={{ fontSize:11, color:"#94a3b8", marginBottom:4 }}>{item.source_path}</div>
+                      <div style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.6 }}>{item.preview}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:18 }}>
+          <div style={{ fontSize:15, fontWeight:700, color:"#e2e8f0", marginBottom:12 }}>文件差異比對</div>
+          <div style={{ fontSize:12, color:"#94a3b8", marginBottom:10 }}>比較兩份程序或表單的版本差異、缺漏規則與文字增減。</div>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10, padding:"10px 12px", background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10 }}>
+            <input id="compare-llm-toggle" type="checkbox" checked={compareUseLlm} onChange={e => setCompareUseLlm(e.target.checked)} />
+            <label htmlFor="compare-llm-toggle" style={{ fontSize:12, color:"#cbd5e1", cursor:"pointer" }}>啟用 LLM 摘要</label>
+            <span style={{ fontSize:11, color:"#94a3b8" }}>預設關閉。關閉時只跑規則與文字差異，比較快。</span>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
+            <button onClick={() => setCompareMode("generic")} style={{ background:compareMode === "generic" ? "rgba(29,78,216,0.22)" : "rgba(255,255,255,0.04)", border:"1px solid " + (compareMode === "generic" ? "rgba(29,78,216,0.45)" : "rgba(255,255,255,0.1)"), borderRadius:999, color:compareMode === "generic" ? "#bfdbfe" : "#94a3b8", cursor:"pointer", padding:"6px 12px", fontSize:12, fontWeight:700 }}>一般比對</button>
+            <button onClick={() => setCompareMode("version")} style={{ background:compareMode === "version" ? "rgba(124,58,237,0.22)" : "rgba(255,255,255,0.04)", border:"1px solid " + (compareMode === "version" ? "rgba(124,58,237,0.45)" : "rgba(255,255,255,0.1)"), borderRadius:999, color:compareMode === "version" ? "#ddd6fe" : "#94a3b8", cursor:"pointer", padding:"6px 12px", fontSize:12, fontWeight:700 }}>同文件不同版次</button>
+          </div>
+          {compareMode === "generic" ? (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+              <div>
+                <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>左側文件</div>
+                <select value={compareLeftPath} onChange={e => setCompareLeftPath(e.target.value)} style={inputStyle}>
+                  {sources.map(item => (
+                    <option key={"left-" + item.id} value={item.path}>{item.id}｜{item.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>右側文件</div>
+                <select value={compareRightPath} onChange={e => setCompareRightPath(e.target.value)} style={inputStyle}>
+                  {sources.map(item => (
+                    <option key={"right-" + item.id} value={item.path}>{item.id}｜{item.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display:"grid", gap:10 }}>
+              <div>
+                <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>基準文件</div>
+                <select value={compareLeftPath} onChange={e => setCompareLeftPath(e.target.value)} style={inputStyle}>
+                  {sources.map(item => (
+                    <option key={"base-" + item.id} value={item.path}>{item.id}｜{item.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                <button onClick={loadVersionCandidates} disabled={versionCandidatesBusy || !compareLeftPath} style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.14)", borderRadius:10, color:"#e2e8f0", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity:(versionCandidatesBusy || !compareLeftPath) ? 0.6 : 1 }}>{versionCandidatesBusy ? "搜尋中..." : "尋找同文件版次"}</button>
+                {versionCandidates.length > 0 && <div style={{ fontSize:12, color:"#cbd5e1", alignSelf:"center" }}>已找到 {versionCandidates.length} 個候選版本</div>}
+              </div>
+              <div>
+                <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>候選版次</div>
+                <select value={compareRightPath} onChange={e => setCompareRightPath(e.target.value)} style={inputStyle}>
+                  <option value="">請選擇候選版本</option>
+                  {versionCandidates.map(item => (
+                    <option key={"candidate-" + item.path} value={item.path}>{item.title}{item.version_label ? "｜版次 " + item.version_label : ""}{item.extension ? "｜" + item.extension : ""}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+          <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:12 }}>
+            <button onClick={runDocumentCompare} disabled={compareBusy || !compareLeftPath || !compareRightPath} style={{ background:"linear-gradient(135deg,#1d4ed8,#7c3aed)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity:(compareBusy || !compareLeftPath || !compareRightPath) ? 0.6 : 1 }}>{compareBusy ? "比對中..." : "執行文件比對"}</button>
+            <button onClick={exportDocumentCompareReport} disabled={compareExportBusy || !compareLeftPath || !compareRightPath} style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.14)", borderRadius:10, color:"#e2e8f0", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity:(compareExportBusy || !compareLeftPath || !compareRightPath) ? 0.6 : 1 }}>{compareExportBusy ? "匯出中..." : "下載缺漏比對報告"}</button>
+            <button onClick={exportDocumentCompareWordReport} disabled={compareDocxExportBusy || !compareLeftPath || !compareRightPath} style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.14)", borderRadius:10, color:"#e2e8f0", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity:(compareDocxExportBusy || !compareLeftPath || !compareRightPath) ? 0.6 : 1 }}>{compareDocxExportBusy ? "匯出中..." : "下載 Word 比對報告"}</button>
+          </div>
+          {compareMessage && <div style={{ marginTop:10, fontSize:12, color:"#c4b5fd" }}>{compareMessage}</div>}
+          {compareResult && (
+            <div style={{ marginTop:14, display:"grid", gap:10 }}>
+              {compareResult.version_change_conclusion && (
+                <div style={{ background:"rgba(59,130,246,0.08)", border:"1px solid rgba(59,130,246,0.18)", borderRadius:10, padding:"10px 12px" }}>
+                  <div style={{ fontSize:12, color:"#93c5fd", fontWeight:700, marginBottom:6 }}>版次結論</div>
+                  <div style={{ fontSize:12, color:"#dbeafe", lineHeight:1.7 }}>{compareResult.version_change_conclusion}</div>
+                  {compareResult.version_change_recommendation && <div style={{ marginTop:6, fontSize:12, color:"#bfdbfe" }}>{compareResult.version_change_recommendation}</div>}
+                </div>
+              )}
+              <div style={{ fontSize:12, color:"#e9d5ff", lineHeight:1.8, whiteSpace:"pre-wrap" }}>{compareResult.summary}</div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                <Badge color="#7c3aed">相似度 {compareResult.similarity}</Badge>
+                <Badge color="#60a5fa">prompt {compareResult.prompt_version}</Badge>
+                {typeof compareResult.same_document_family === "boolean" && <Badge color={compareResult.same_document_family ? "#22c55e" : "#f59e0b"}>{compareResult.same_document_family ? "同文件版次" : "疑似不同文件"}</Badge>}
+                {typeof compareResult.cache_hit === "boolean" && <Badge color={compareResult.cache_hit ? "#14b8a6" : "#64748b"}>{compareResult.cache_hit ? "命中快取" : "即時計算"}</Badge>}
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.18)", borderRadius:10, padding:"10px 12px" }}>
+                  <div style={{ fontSize:12, color:"#fcd34d", fontWeight:700, marginBottom:6 }}>右側新增內容</div>
+                  {(compareResult.added_lines || []).slice(0, 6).map((item, idx) => (
+                    <div key={idx} style={{ fontSize:12, color:"#fde68a", lineHeight:1.6 }}>+ {item}</div>
+                  ))}
+                  {(!compareResult.added_lines || compareResult.added_lines.length === 0) && <div style={{ fontSize:12, color:"#94a3b8" }}>未偵測到明顯新增內容。</div>}
+                </div>
+                <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.18)", borderRadius:10, padding:"10px 12px" }}>
+                  <div style={{ fontSize:12, color:"#fca5a5", fontWeight:700, marginBottom:6 }}>左側移除內容</div>
+                  {(compareResult.removed_lines || []).slice(0, 6).map((item, idx) => (
+                    <div key={idx} style={{ fontSize:12, color:"#fecaca", lineHeight:1.6 }}>- {item}</div>
+                  ))}
+                  {(!compareResult.removed_lines || compareResult.removed_lines.length === 0) && <div style={{ fontSize:12, color:"#94a3b8" }}>未偵測到明顯移除內容。</div>}
+                </div>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, padding:"10px 12px" }}>
+                  <div style={{ fontSize:12, color:"#e2e8f0", fontWeight:700, marginBottom:6 }}>僅左側存在的規則缺口</div>
+                  {(compareResult.left_only_issues || []).map(item => (
+                    <div key={item.code} style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.6 }}>- {item.title}</div>
+                  ))}
+                  {(!compareResult.left_only_issues || compareResult.left_only_issues.length === 0) && <div style={{ fontSize:12, color:"#94a3b8" }}>無。</div>}
+                </div>
+                <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, padding:"10px 12px" }}>
+                  <div style={{ fontSize:12, color:"#e2e8f0", fontWeight:700, marginBottom:6 }}>僅右側存在的規則缺口</div>
+                  {(compareResult.right_only_issues || []).map(item => (
+                    <div key={item.code} style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.6 }}>- {item.title}</div>
+                  ))}
+                  {(!compareResult.right_only_issues || compareResult.right_only_issues.length === 0) && <div style={{ fontSize:12, color:"#94a3b8" }}>無。</div>}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:18 }}>
+          <div style={{ fontSize:15, fontWeight:700, color:"#e2e8f0", marginBottom:12 }}>結果歷史與查詢</div>
+          <div style={{ fontSize:12, color:"#94a3b8", marginBottom:10 }}>查詢近期文件稽核、文件比對與報告匯出執行結果，方便覆核與追蹤。</div>
+          <div style={{ display:"grid", gridTemplateColumns:"0.7fr 1.3fr auto", gap:10, alignItems:"end" }}>
+            <div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>類型</div>
+              <select value={historyMode} onChange={e => setHistoryMode(e.target.value)} style={inputStyle}>
+                <option value="all">全部</option>
+                <option value="audit">文件稽核</option>
+                <option value="compare">文件比對</option>
+                <option value="export">報告匯出</option>
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>關鍵字</div>
+              <input value={historyQuery} onChange={e => setHistoryQuery(e.target.value)} placeholder="可搜尋 task type、prompt version、request 摘要" style={inputStyle} />
+            </div>
+            <button onClick={() => loadHistory()} disabled={historyBusy} style={{ background:"linear-gradient(135deg,#475569,#0f172a)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity: historyBusy ? 0.6 : 1 }}>{historyBusy ? "載入中..." : "查詢歷史"}</button>
+          </div>
+          {historyMessage && <div style={{ marginTop:10, fontSize:12, color:"#cbd5e1" }}>{historyMessage}</div>}
+          <div style={{ marginTop:12, display:"flex", flexDirection:"column", gap:8 }}>
+            {historyItems.map(item => (
+              <div key={item.id} style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, padding:"10px 12px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", gap:12, flexWrap:"wrap", marginBottom:6 }}>
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    <Badge color="#38bdf8">{item.task_type}</Badge>
+                    <Badge color={item.result_status === "success" ? "#22c55e" : "#ef4444"}>{item.result_status}</Badge>
+                    {item.prompt_version && <Badge color="#a78bfa">{item.prompt_version}</Badge>}
+                  </div>
+                  <div style={{ fontSize:11, color:"#94a3b8" }}>{item.created_at ? item.created_at.slice(0, 19).replace("T", " ") : ""}</div>
+                </div>
+                <div style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.6, whiteSpace:"pre-wrap" }}>{item.request_summary || "無 request 摘要"}</div>
+              </div>
+            ))}
+            {historyItems.length === 0 && <div style={{ fontSize:12, color:"#64748b" }}>目前尚無可顯示的歷史紀錄。</div>}
+          </div>
+        </div>
+
+        <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:18 }}>
+          <div style={{ fontSize:15, fontWeight:700, color:"#e2e8f0", marginBottom:12 }}>SPC 摘要</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            <div style={{ gridColumn:"1 / -1" }}>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>參數名稱</div>
+              <input value={spcForm.parameter_name} onChange={e => setSpcForm(prev => ({ ...prev, parameter_name: e.target.value }))} style={inputStyle} />
+            </div>
+            <div style={{ gridColumn:"1 / -1" }}>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>數值清單</div>
+              <textarea value={spcForm.csv_text} onChange={e => setSpcForm(prev => ({ ...prev, csv_text: e.target.value }))} style={{ ...inputStyle, minHeight:84, resize:"vertical" }} />
+            </div>
+            <div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>LSL</div>
+              <input value={spcForm.lsl} onChange={e => setSpcForm(prev => ({ ...prev, lsl: e.target.value }))} style={inputStyle} />
+            </div>
+            <div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>USL</div>
+              <input value={spcForm.usl} onChange={e => setSpcForm(prev => ({ ...prev, usl: e.target.value }))} style={inputStyle} />
+            </div>
+            <div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>Target</div>
+              <input value={spcForm.target} onChange={e => setSpcForm(prev => ({ ...prev, target: e.target.value }))} style={inputStyle} />
+            </div>
+          </div>
+          <button onClick={runSpcAnalyze} disabled={spcBusy} style={{ marginTop:12, background:"linear-gradient(135deg,#0f766e,#14b8a6)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity: spcBusy ? 0.6 : 1 }}>{spcBusy ? "分析中..." : "產生 SPC 摘要"}</button>
+          {spcMessage && <div style={{ marginTop:10, fontSize:12, color:"#99f6e4" }}>{spcMessage}</div>}
+          {spcResult && (
+            <div style={{ marginTop:14, display:"flex", flexDirection:"column", gap:10 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:8 }}>
+                {[
+                  ["平均值", spcResult.metrics.mean],
+                  ["標準差", spcResult.metrics.stdev],
+                  ["Cpk", spcResult.metrics.cpk ?? "n/a"],
+                  ["Cp", spcResult.metrics.cp ?? "n/a"],
+                  ["超規筆數", spcResult.metrics.out_of_spec_count],
+                  ["趨勢", spcResult.metrics.trend],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ background:"rgba(20,184,166,0.08)", border:"1px solid rgba(20,184,166,0.16)", borderRadius:10, padding:"10px 12px" }}>
+                    <div style={{ fontSize:11, color:"#99f6e4" }}>{label}</div>
+                    <div style={{ fontSize:14, color:"#e2e8f0", fontWeight:700, marginTop:4 }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.7 }}>{spcResult.engineering_summary}</div>
+              <div style={{ fontSize:12, color:"#fef3c7", lineHeight:1.7 }}>{spcResult.management_summary}</div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:18 }}>
+          <div style={{ fontSize:15, fontWeight:700, color:"#e2e8f0", marginBottom:12 }}>文件知識問答</div>
+          <div style={{ fontSize:12, color:"#94a3b8", marginBottom:10 }}>只根據已匯入的文件片段回答，並保留引用來源。</div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
+            <button onClick={() => setQaScope("selected")} style={{ background:qaScope === "selected" ? "rgba(124,58,237,0.22)" : "rgba(255,255,255,0.04)", border:"1px solid " + (qaScope === "selected" ? "rgba(124,58,237,0.45)" : "rgba(255,255,255,0.1)"), borderRadius:999, color:qaScope === "selected" ? "#ddd6fe" : "#94a3b8", cursor:"pointer", padding:"6px 12px", fontSize:12, fontWeight:700 }}>限定目前文件</button>
+            <button onClick={() => setQaScope("all")} style={{ background:qaScope === "all" ? "rgba(124,58,237,0.22)" : "rgba(255,255,255,0.04)", border:"1px solid " + (qaScope === "all" ? "rgba(124,58,237,0.45)" : "rgba(255,255,255,0.1)"), borderRadius:999, color:qaScope === "all" ? "#ddd6fe" : "#94a3b8", cursor:"pointer", padding:"6px 12px", fontSize:12, fontWeight:700 }}>搜尋全部文件</button>
+          </div>
+          {qaScope === "selected" && (
+            <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:10 }}>
+              目前限定文件：<span style={{ color:"#e9d5ff" }}>{sources.find(item => item.path === selectedPath)?.name || "未選擇"}</span>
+            </div>
+          )}
+          <textarea value={qaQuestion} onChange={e => setQaQuestion(e.target.value)} style={{ ...inputStyle, minHeight:92, resize:"vertical" }} />
+          <button onClick={runKnowledgeQA} disabled={qaBusy} style={{ marginTop:12, background:"linear-gradient(135deg,#7c3aed,#a855f7)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity: qaBusy ? 0.6 : 1 }}>{qaBusy ? "回答中..." : "執行文件問答"}</button>
+          {qaMessage && <div style={{ marginTop:10, fontSize:12, color:"#ddd6fe" }}>{qaMessage}</div>}
+          {qaResult && (
+            <div style={{ marginTop:14, display:"grid", gap:10 }}>
+              <div style={{ fontSize:11, color:"#94a3b8" }}>回答範圍：{qaResult.scope || "全部已匯入文件"}</div>
+              <div style={{ fontSize:12, color:"#e9d5ff", lineHeight:1.8, whiteSpace:"pre-wrap" }}>{qaResult.answer}</div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                <Badge color="#a855f7">prompt {qaResult.prompt_version}</Badge>
+                <Badge color={qaResult.needs_human_review ? "#f59e0b" : "#22c55e"}>{qaResult.needs_human_review ? "需人工覆核" : "可直接採用"}</Badge>
+              </div>
+              {(qaResult.insufficient_evidence || []).length > 0 && (
+                <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.18)", borderRadius:10, padding:"10px 12px" }}>
+                  <div style={{ fontSize:12, color:"#fcd34d", fontWeight:700, marginBottom:6 }}>證據不足</div>
+                  {(qaResult.insufficient_evidence || []).map((item, idx) => (
+                    <div key={idx} style={{ fontSize:12, color:"#fde68a", lineHeight:1.6 }}>- {item}</div>
+                  ))}
+                </div>
+              )}
+              <div>
+                <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>引用片段</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {(qaResult.citations || []).map((item, idx) => (
+                    <div key={idx} style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, padding:"10px 12px" }}>
+                      <div style={{ fontSize:12, color:"#c4b5fd", marginBottom:4 }}>{item.title}</div>
+                      <div style={{ fontSize:11, color:"#94a3b8", marginBottom:4 }}>{item.source_path}</div>
+                      <div style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.6 }}>{item.preview}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:18 }}>
+          <div style={{ fontSize:15, fontWeight:700, color:"#e2e8f0", marginBottom:12 }}>異常草稿</div>
+          <div style={{ display:"grid", gap:10 }}>
+            <div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>問題描述</div>
+              <textarea value={deviationForm.issue_description} onChange={e => setDeviationForm(prev => ({ ...prev, issue_description: e.target.value }))} style={{ ...inputStyle, minHeight:88, resize:"vertical" }} />
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+              <div>
+                <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>製程步驟</div>
+                <input value={deviationForm.process_step} onChange={e => setDeviationForm(prev => ({ ...prev, process_step: e.target.value }))} style={inputStyle} />
+              </div>
+              <div>
+                <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>批號</div>
+                <input value={deviationForm.lot_no} onChange={e => setDeviationForm(prev => ({ ...prev, lot_no: e.target.value }))} style={inputStyle} />
+              </div>
+              <div>
+                <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>嚴重度</div>
+                <select value={deviationForm.severity} onChange={e => setDeviationForm(prev => ({ ...prev, severity: e.target.value }))} style={inputStyle}>
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <button onClick={runDeviationDraft} disabled={deviationBusy} style={{ marginTop:12, background:"linear-gradient(135deg,#dc2626,#f97316)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity: deviationBusy ? 0.6 : 1 }}>{deviationBusy ? "產生中..." : "產生異常草稿"}</button>
+          {deviationMessage && <div style={{ marginTop:10, fontSize:12, color:"#fdba74" }}>{deviationMessage}</div>}
+          {deviationResult && (
+            <div style={{ marginTop:14, display:"grid", gap:10 }}>
+              <div style={{ fontSize:12, color:"#fde68a", lineHeight:1.7 }}>{deviationResult.draft_summary}</div>
+              {[
+                ["已知事實", deviationResult.known_facts],
+                ["可能原因", deviationResult.possible_causes],
+                ["暫時圍堵措施", deviationResult.containment_actions],
+                ["永久對策方向", deviationResult.permanent_actions],
+                ["驗證計畫", deviationResult.verification_plan],
+              ].map(([label, items]) => (
+                <div key={label} style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, padding:"10px 12px" }}>
+                  <div style={{ fontSize:12, color:"#e2e8f0", fontWeight:700, marginBottom:6 }}>{label}</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                    {(items || []).map((item, idx) => (
+                      <div key={idx} style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.6 }}>- {item}</div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ marginTop:18, background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:18 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:12, flexWrap:"wrap", alignItems:"center", marginBottom:10 }}>
+          <div style={{ fontSize:14, fontWeight:700, color:"#e2e8f0" }}>文件搜尋結果</div>
+          <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ ...inputStyle, width:260 }} />
+            <button onClick={runSearch} disabled={searchBusy} style={{ background:"rgba(56,189,248,0.16)", border:"1px solid rgba(56,189,248,0.3)", borderRadius:10, color:"#bae6fd", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity: searchBusy ? 0.6 : 1 }}>{searchBusy ? "搜尋中..." : "重新搜尋"}</button>
+          </div>
+        </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {searchResults.map((item, idx) => (
+            <div key={idx} style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:10, padding:"10px 12px" }}>
+              <div style={{ fontSize:12, color:"#7dd3fc", marginBottom:4 }}>{item.title}</div>
+              <div style={{ fontSize:11, color:"#94a3b8", marginBottom:4 }}>{item.source_path}</div>
+              <div style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.6 }}>{item.preview}</div>
+            </div>
+          ))}
+          {searchResults.length === 0 && <div style={{ fontSize:12, color:"#64748b" }}>尚未查到結果，可用文件關鍵字測試搜尋與切片。</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── REPORT TAB ───────────────────────────────────────────────────────────────
+function ReportTab({ instruments, documents, training, equipment, suppliers, nonConformances: ncs, auditPlans, envRecords }) {
+  const [generated, setGenerated] = useState(false);
+  const calibEnriched = instruments.filter(i=>i.status!=="免校正").map(i => ({ ...i, nextDate:addDays(i.calibratedDate,i.intervalDays), days:daysUntil(addDays(i.calibratedDate,i.intervalDays)) }));
+  const eqEnriched = equipment.map(eq => ({ ...eq, nextDate:addDays(eq.lastMaintenance,eq.intervalDays), days:daysUntil(addDays(eq.lastMaintenance,eq.intervalDays)) }));
+  const supEnriched = suppliers.map(s => ({ ...s, nextEvalDate:addDays(s.lastEvalDate,s.evalIntervalDays), days:daysUntil(addDays(s.lastEvalDate,s.evalIntervalDays)) }));
+  const overdue = calibEnriched.filter(i=>i.days<0).length;
+  const soonCalib = calibEnriched.filter(i=>i.days>=0&&i.days<=14).length;
+  const overdueEq = eqEnriched.filter(e=>e.days<0).length;
+  const openNcs = ncs.filter(n=>n.status!=="已關閉").length;
+  const totalTraining = training.reduce((s,e)=>s+e.trainings.length,0);
+  const auditCompleted = auditPlans.filter(a=>a.status==="已完成").length;
+  const auditTotal = auditPlans.length;
+  const envPassRate = envRecords.length>0?Math.round(envRecords.filter(r=>r.result==="合格").length/envRecords.length*100):0;
+  const tdStyle = { padding:"7px 12px", border:"1px solid #e2e8f0" };
+  const thStyle = { padding:"8px 12px", textAlign:"left", border:"1px solid #e2e8f0", background:"#f1f5f9" };
+  const secStyle = { fontSize:15, fontWeight:800, color:"#0f172a", paddingLeft:12, marginBottom:14 };
+  const conStyle = { marginTop:10, padding:12, background:"#f8fafc", borderRadius:8, fontSize:13, color:"#374151" };
+  return (
+    <div>
+      <SectionHeader title="稽核報告產生器" color="#f472b6" />
+      <div style={{ background:"rgba(244,114,182,0.06)", border:"1px solid rgba(244,114,182,0.2)", borderRadius:14, padding:24, marginBottom:20 }}>
+        <div style={{ fontSize:15, color:"#f9a8d4", fontWeight:600, marginBottom:8 }}>[ISO 9001] 自動產生 ISO 9001:2015 稽核摘要報告</div>
+        <div style={{ fontSize:13, color:"#64748b", lineHeight:1.7 }}>系統將根據目前資料庫中的記錄，自動彙整校正狀態、設備保養、訓練記錄、文件版本、供應商評鑑、不符合記錄、內部稽核完成狀態及工作環境監測。</div>
+        <div style={{ display:"flex", gap:12, marginTop:16 }}>
+          <button onClick={() => setGenerated(true)} style={{ background:"linear-gradient(135deg, #be185d, #ec4899)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"12px 24px", fontSize:14, fontWeight:700 }}>[+] 產生稽核報告</button>
+          {generated && (<button onClick={() => window.print()} style={{ background:"rgba(244,114,182,0.15)", border:"1px solid rgba(244,114,182,0.3)", borderRadius:10, color:"#f9a8d4", cursor:"pointer", padding:"12px 24px", fontSize:14, fontWeight:700 }}>[P] 列印 / 存為 PDF</button>)}
+        </div>
+      </div>
+      {generated && (
+        <div id="report-content" style={{ background:"#fff", color:"#1e293b", borderRadius:14, padding:32, fontFamily:"'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif" }}>
+          <div style={{ textAlign:"center", borderBottom:"2px solid #e2e8f0", paddingBottom:20, marginBottom:24 }}>
+            <div style={{ fontSize:22, fontWeight:800, color:"#0f172a" }}>潔沛企業有限公司</div>
+            <div style={{ fontSize:16, fontWeight:600, color:"#374151", marginTop:4 }}>ISO 9001:2015 品質系統稽核摘要報告</div>
+            <div style={{ fontSize:13, color:"#6b7280", marginTop:8 }}>報告產生日期：{formatDate(new Date().toISOString().split("T")[0])} / 報告版本：自動產生</div>
+          </div>
+          {/* 一、量測資源 MP-05 */}
+          <div style={{ marginBottom:24 }}>
+            <div style={{ ...secStyle, borderLeft:"4px solid #3b82f6" }}>一、量測資源管理（MP-05）稽核摘要</div>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}><thead><tr style={{ background:"#f1f5f9" }}>{["儀器編號","名稱","類型","最後校正","下次校正","狀態"].map(h=>(<th key={h} style={thStyle}>{h}</th>))}</tr></thead><tbody>{calibEnriched.map(i=>(<tr key={i.id}><td style={tdStyle}>{i.id}</td><td style={tdStyle}>{i.name}</td><td style={tdStyle}>{i.type}</td><td style={tdStyle}>{formatDate(i.calibratedDate)}</td><td style={tdStyle}>{formatDate(i.nextDate)}</td><td style={{...tdStyle,color:i.days<0?"#ef4444":i.days<=14?"#f97316":"#16a34a",fontWeight:700}}>{urgencyLabel(i.days)}</td></tr>))}</tbody></table>
+            <div style={conStyle}>稽核結論：共 {instruments.length} 台量規儀器，逾期 <b style={{color:"#ef4444"}}>{overdue}</b> 台，14天內到期 <b style={{color:"#f97316"}}>{soonCalib}</b> 台。{overdue>0&&" [警告] 請立即安排逾期儀器校正。"}</div>
+          </div>
+          {/* 二、設施設備 MP-04 */}
+          <div style={{ marginBottom:24 }}>
+            <div style={{ ...secStyle, borderLeft:"4px solid #f97316" }}>二、設施設備管理（MP-04）稽核摘要</div>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}><thead><tr style={{ background:"#f1f5f9" }}>{["設備編號","名稱","位置","最後保養","下次保養","狀態"].map(h=>(<th key={h} style={thStyle}>{h}</th>))}</tr></thead><tbody>{eqEnriched.map(eq=>(<tr key={eq.id}><td style={tdStyle}>{eq.id}</td><td style={tdStyle}>{eq.name}</td><td style={tdStyle}>{eq.location}</td><td style={tdStyle}>{formatDate(eq.lastMaintenance)}</td><td style={tdStyle}>{formatDate(eq.nextDate)}</td><td style={{...tdStyle,color:eq.days<0?"#ef4444":eq.days<=30?"#f97316":"#16a34a",fontWeight:700}}>{urgencyLabel(eq.days)}</td></tr>))}</tbody></table>
+            <div style={conStyle}>稽核結論：共 {equipment.length} 台設備，逾期保養 <b style={{color:"#ef4444"}}>{overdueEq}</b> 台。</div>
+          </div>
+          {/* 三、人力資源 MP-03 */}
+          <div style={{ marginBottom:24 }}>
+            <div style={{ ...secStyle, borderLeft:"4px solid #8b5cf6" }}>三、人力資源及訓練（MP-03）稽核摘要</div>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}><thead><tr style={{ background:"#f1f5f9" }}>{["員工編號","姓名","部門","職稱","到職日","訓練筆數","外訓筆數","有證書"].map(h=>(<th key={h} style={thStyle}>{h}</th>))}</tr></thead><tbody>{training.map(emp=>(<tr key={emp.id}><td style={tdStyle}>{emp.id}</td><td style={{...tdStyle,fontWeight:600}}>{emp.name}</td><td style={tdStyle}>{emp.dept}</td><td style={tdStyle}>{emp.role}</td><td style={tdStyle}>{formatDate(emp.hireDate)}</td><td style={{...tdStyle,fontWeight:700}}>{emp.trainings.length}</td><td style={tdStyle}>{emp.trainings.filter(t=>t.type==="外訓").length}</td><td style={tdStyle}>{emp.trainings.filter(t=>t.cert==="有").length}</td></tr>))}</tbody></table>
+            <div style={conStyle}>稽核結論：共 {training.length} 名員工，訓練記錄合計 <b>{totalTraining}</b> 筆。</div>
+          </div>
+          {/* 四、供應商 MP-10 */}
+          <div style={{ marginBottom:24 }}>
+            <div style={{ ...secStyle, borderLeft:"4px solid #06b6d4" }}>四、採購及供應商管理（MP-10）稽核摘要</div>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}><thead><tr style={{ background:"#f1f5f9" }}>{["供應商編號","名稱","類別","評鑑分數","評定結果","最後評鑑","下次評鑑"].map(h=>(<th key={h} style={thStyle}>{h}</th>))}</tr></thead><tbody>{supEnriched.map(s=>(<tr key={s.id}><td style={tdStyle}>{s.id}</td><td style={{...tdStyle,fontWeight:600}}>{s.name}</td><td style={tdStyle}>{s.category}</td><td style={{...tdStyle,fontWeight:700,color:s.evalScore>=90?"#16a34a":s.evalScore>=70?"#d97706":"#ef4444"}}>{s.evalScore}</td><td style={tdStyle}>{s.evalResult}</td><td style={tdStyle}>{formatDate(s.lastEvalDate)}</td><td style={{...tdStyle,color:s.days<0?"#ef4444":"#374151"}}>{formatDate(s.nextEvalDate)}</td></tr>))}</tbody></table>
+            <div style={conStyle}>稽核結論：共 {suppliers.length} 家供應商，評鑑逾期 <b style={{color:"#ef4444"}}>{supEnriched.filter(s=>s.days<0).length}</b> 家，條件合格 <b style={{color:"#eab308"}}>{suppliers.filter(s=>s.evalResult==="條件合格").length}</b> 家。</div>
+          </div>
+          {/* 五、不符合 MP-15 */}
+          <div style={{ marginBottom:24 }}>
+            <div style={{ ...secStyle, borderLeft:"4px solid #ef4444" }}>五、不符合及矯正措施（MP-15）稽核摘要</div>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}><thead><tr style={{ background:"#f1f5f9" }}>{["編號","日期","部門","類型","嚴重度","簡述","資任人","到期日","狀態"].map(h=>(<th key={h} style={thStyle}>{h}</th>))}</tr></thead><tbody>{ncs.map(nc=>(<tr key={nc.id}><td style={{...tdStyle,fontFamily:"monospace",fontSize:11}}>{nc.id}</td><td style={tdStyle}>{formatDate(nc.date)}</td><td style={tdStyle}>{nc.dept}</td><td style={tdStyle}>{nc.type}</td><td style={{...tdStyle,color:nc.severity==="重大"?"#ef4444":"#d97706",fontWeight:700}}>{nc.severity}</td><td style={tdStyle}>{nc.description.substring(0,20)}{nc.description.length>20?"...":""}</td><td style={tdStyle}>{nc.responsible}</td><td style={tdStyle}>{formatDate(nc.dueDate)}</td><td style={{...tdStyle,color:nc.status==="已關閉"?"#16a34a":nc.status==="處理中"?"#d97706":"#ef4444",fontWeight:700}}>{nc.status}</td></tr>))}</tbody></table>
+            <div style={conStyle}>稽核結論：共 {ncs.length} 筆不符合報告，尚未關閉 <b style={{color:"#ef4444"}}>{openNcs}</b> 筆。{openNcs>0&&" [警告] 請監控未關閉項目之矯正措施執行進度。"}</div>
+          </div>
+          {/* 六、內部稽核 MP-09 */}
+          <div style={{ marginBottom:24 }}>
+            <div style={{ ...secStyle, borderLeft:"4px solid #8b5cf6" }}>六、內部稽核管理（MP-09）執行摘要</div>
+            <div style={conStyle}>內部稽核已完成 <b>{auditCompleted}</b> 次 / 計畫 <b>{auditTotal}</b> 次，完成率 <b>{auditTotal>0?Math.round(auditCompleted/auditTotal*100):0}%</b>。累計發現 {auditPlans.reduce((s,a)=>s+a.findings,0)} 項，不符合 {auditPlans.reduce((s,a)=>s+a.ncCount,0)} 項。</div>
+          </div>
+          {/* 七、環境監控 MP-06 */}
+          <div style={{ marginBottom:24 }}>
+            <div style={{ ...secStyle, borderLeft:"4px solid #14b8a6" }}>七、工作環境監控（MP-06）稽核摘要</div>
+            <div style={conStyle}>潔淨室環境監測共 {envRecords.length} 筆，整體合格率 <b style={{color:envPassRate>=90?"#16a34a":envPassRate>=80?"#d97706":"#ef4444"}}>{envPassRate}%</b>，不合格 <b style={{color:"#ef4444"}}>{envRecords.filter(r=>r.result==="不合格").length}</b> 筆，警告 <b style={{color:"#d97706"}}>{envRecords.filter(r=>r.result==="警告").length}</b> 筆。</div>
+          </div>
+          <div style={{ borderTop:"1px solid #e2e8f0", paddingTop:16, marginTop:24, display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16 }}>
+            {["稽核員","審核者","核准者"].map(role => (<div key={role} style={{ textAlign:"center" }}><div style={{ height:40, borderBottom:"1px solid #374151" }} /><div style={{ fontSize:12, color:"#6b7280", marginTop:6 }}>{role}（簽名）</div></div>))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function sortByDocumentId(items) {
+  return [...items].sort((a, b) => String(a.id || "").localeCompare(String(b.id || ""), "zh-Hant", { numeric: true, sensitivity: "base" }));
+}
+
+function buildIsoDocumentMap(documents, manuals) {
+  const firstLevel = [];
+  const procedures = [];
+  const thirdLevelMap = new Map();
+  const procedureMap = new Map();
+  const orphanForms = [];
+  const orphanRecords = [];
+
+  const getProcedureKey = id => {
+    const match = String(id || "").match(/^MP-(\d+)/i);
+    return match ? String(parseInt(match[1], 10)).padStart(2, "0") : "";
+  };
+
+  const addThirdLevel = doc => {
+    if (!doc || !doc.id) return;
+    if (!thirdLevelMap.has(doc.id)) thirdLevelMap.set(doc.id, doc);
+  };
+
+  documents.forEach(doc => {
+    if (/^MM-/i.test(doc.id) || doc.type === "管理手冊") {
+      firstLevel.push(doc);
+      return;
+    }
+    if (/^MP-/i.test(doc.id)) {
+      procedures.push(doc);
+      procedureMap.set(getProcedureKey(doc.id), { procedure: doc, forms: [], records: [] });
+      return;
+    }
+    if (/^RW-/i.test(doc.id) || doc.type === "作業指導書") {
+      addThirdLevel(doc);
+    }
+  });
+
+  manuals.forEach(addThirdLevel);
+
+  documents.forEach(doc => {
+    const match = String(doc.id || "").match(/^(FR|RC)-(\d+)/i);
+    if (!match) return;
+    const bucket = procedureMap.get(String(parseInt(match[2], 10)).padStart(2, "0"));
+    if (!bucket) {
+      if (match[1].toUpperCase() === "FR") orphanForms.push(doc);
+      else orphanRecords.push(doc);
+      return;
+    }
+    if (match[1].toUpperCase() === "FR") bucket.forms.push(doc);
+    else bucket.records.push(doc);
+  });
+
+  const bundles = procedures
+    .map(proc => {
+      const key = getProcedureKey(proc.id);
+      const bucket = procedureMap.get(key) || { procedure: proc, forms: [], records: [] };
+      return {
+        procedure: proc,
+        forms: sortByDocumentId(bucket.forms),
+        records: sortByDocumentId(bucket.records),
+      };
+    })
+    .sort((a, b) => String(a.procedure.id).localeCompare(String(b.procedure.id), "zh-Hant", { numeric: true, sensitivity: "base" }));
+
+  return {
+    firstLevel: sortByDocumentId(firstLevel),
+    secondLevel: sortByDocumentId(procedures),
+    thirdLevel: sortByDocumentId(Array.from(thirdLevelMap.values())),
+    bundles,
+    orphanForms: sortByDocumentId(orphanForms),
+    orphanRecords: sortByDocumentId(orphanRecords),
+  };
+}
+
+function IsoDocumentCard({ doc, accent = "#60a5fa", showPaths = false }) {
+  const path = doc.pdfPath || doc.docxPath || doc.fileName || "";
+  return (
+    <div style={{ background:"rgba(255,255,255,0.03)", border:`1px solid ${accent}33`, borderRadius:14, padding:16 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
+        <div>
+          <div style={{ fontSize:11, fontFamily:"monospace", color:accent, fontWeight:700 }}>{doc.id}</div>
+          <div style={{ fontSize:14, fontWeight:700, color:"#e2e8f0", marginTop:6 }}>{doc.name}</div>
+        </div>
+        <Badge color={accent}>{doc.type}</Badge>
+      </div>
+      <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginTop:10, fontSize:12, color:"#94a3b8" }}>
+        <span>部門: {doc.department || "未填寫"}</span>
+        <span>版本: v{doc.version || "?"}</span>
+        {doc.author && <span>作者: {doc.author}</span>}
+      </div>
+      {showPaths && path && <div style={{ marginTop:10, fontSize:11, color:"#64748b", wordBreak:"break-all" }}>{path}</div>}
+    </div>
+  );
+}
+
+function IsoProcedureBundle({ bundle, showPaths = false }) {
+  const sections = [
+    { title: "表單", items: bundle.forms, color: "#22c55e" },
+    { title: "記錄", items: bundle.records, color: "#f59e0b" },
+  ];
+
+  return (
+    <div style={{ background:"rgba(255,255,255,0.025)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:16, padding:18 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap" }}>
+        <div>
+          <div style={{ fontSize:11, fontFamily:"monospace", color:"#60a5fa", fontWeight:700 }}>{bundle.procedure.id}</div>
+          <div style={{ fontSize:16, fontWeight:800, color:"#e2e8f0", marginTop:6 }}>{bundle.procedure.name}</div>
+          <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginTop:8, fontSize:12, color:"#94a3b8" }}>
+            <span>部門: {bundle.procedure.department || "未填寫"}</span>
+            <span>版本: v{bundle.procedure.version || "?"}</span>
+            <span>表單: {bundle.forms.length}</span>
+            <span>記錄: {bundle.records.length}</span>
+          </div>
+        </div>
+        <Badge color="#60a5fa">二階文件</Badge>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))", gap:14, marginTop:18 }}>
+        {sections.map(section => (
+          <div key={section.title} style={{ background:"rgba(15,23,42,0.35)", border:`1px solid ${section.color}22`, borderRadius:12, padding:14 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:section.color, marginBottom:10 }}>{section.title} ({section.items.length})</div>
+            {section.items.length === 0 ? (
+              <div style={{ fontSize:12, color:"#64748b" }}>目前沒有歸屬到此程序的{section.title}</div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                {section.items.map(item => <IsoDocumentCard key={item.id} doc={item} accent={section.color} showPaths={showPaths} />)}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DocumentsManagerTab({ documents, setDocuments, manuals }) {
+  const iso = buildIsoDocumentMap(documents, manuals);
+
+  return (
+    <div>
+      <PageIntro
+        eyebrow="ISO Document Center"
+        title="文件管理（ISO 架構）"
+        description="這裡是 QMS 文件中心。系統會依 ISO 邏輯把一階、二階、三階文件，以及表單與記錄對應到正確程序底下，方便管理與查核。"
+      >
+        <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+          <StatCard label="一階文件" value={iso.firstLevel.length} color="#a78bfa" sub="品質手冊 / 管理手冊" />
+          <StatCard label="二階文件" value={iso.secondLevel.length} color="#60a5fa" sub="管理程序" />
+          <StatCard label="三階文件" value={iso.thirdLevel.length} color="#14b8a6" sub="作業指導書" />
+          <StatCard label="表單" value={documents.filter(doc => /^FR-/i.test(doc.id)).length} color="#22c55e" />
+          <StatCard label="記錄" value={documents.filter(doc => /^RC-/i.test(doc.id)).length} color="#f59e0b" />
+        </div>
+      </PageIntro>
+
+      <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
+        <Panel title="第一層：品質手冊與管理手冊" description="這一層放制度總綱與管理原則，是整套 QMS 的最高層文件。" accent="#a78bfa">
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))", gap:12 }}>
+            {iso.firstLevel.map(doc => <IsoDocumentCard key={doc.id} doc={doc} accent="#a78bfa" showPaths />)}
+          </div>
+        </Panel>
+
+        <Panel title="第二層：管理程序與其表單 / 記錄" description="每一份程序文件下面都會帶出對應表單與記錄，方便你從程序一路追到實際執行紀錄。" accent="#60a5fa">
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            {iso.bundles.map(bundle => <IsoProcedureBundle key={bundle.procedure.id} bundle={bundle} showPaths />)}
+          </div>
+          {(iso.orphanForms.length > 0 || iso.orphanRecords.length > 0) && (
+            <div style={{ marginTop:14, background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:12, padding:14 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"#fcd34d", marginBottom:10 }}>未歸屬程序的文件</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))", gap:10 }}>
+                {iso.orphanForms.map(doc => <IsoDocumentCard key={doc.id} doc={doc} accent="#22c55e" showPaths />)}
+                {iso.orphanRecords.map(doc => <IsoDocumentCard key={doc.id} doc={doc} accent="#f59e0b" showPaths />)}
+              </div>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="第三層：作業指導書" description="這一層是現場操作、設備使用與細部作業規則，通常最貼近實際執行。" accent="#14b8a6">
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))", gap:12 }}>
+            {iso.thirdLevel.map(doc => <IsoDocumentCard key={doc.id} doc={doc} accent="#14b8a6" showPaths />)}
+          </div>
+        </Panel>
+
+        <details style={{ background:uiTheme.panel, border:"1px solid " + uiTheme.panelBorder, borderRadius:18, padding:18, boxShadow: uiTheme.shadow }}>
+          <summary style={{ cursor:"pointer", fontSize:14, fontWeight:700, color:"#e2e8f0" }}>進階管理：原始文件清單、上傳與編修</summary>
+          <div style={{ marginTop:18 }}>
+            <DocumentsTab documents={documents} setDocuments={setDocuments} />
+          </div>
+        </details>
+      </div>
+    </div>
+  );
+}
+
+function LibraryHierarchyTab({ documents, manuals }) {
+  const [search, setSearch] = useState("");
+  const [levelFilter, setLevelFilter] = useState("全部");
+  const iso = buildIsoDocumentMap(documents, manuals);
+
+  const matchesSearch = doc => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [doc.id, doc.name, doc.department, doc.docxPath, doc.pdfPath].filter(Boolean).some(value => String(value).toLowerCase().includes(q));
+  };
+
+  const filterByLevel = section => levelFilter === "全部" || levelFilter === section;
+  const filteredBundles = iso.bundles.map(bundle => ({
+    ...bundle,
+    forms: bundle.forms.filter(matchesSearch),
+    records: bundle.records.filter(matchesSearch),
+    visible: matchesSearch(bundle.procedure) || bundle.forms.some(matchesSearch) || bundle.records.some(matchesSearch),
+  })).filter(bundle => bundle.visible);
+  const filteredFirst = iso.firstLevel.filter(matchesSearch);
+  const filteredThird = iso.thirdLevel.filter(matchesSearch);
+
+  return (
+    <div>
+      <PageIntro
+        eyebrow="Document Library"
+        title="文件庫（ISO 分層瀏覽）"
+        description="文件庫偏向查詢與閱讀。你可以先依 ISO 層級切換，再用搜尋快速縮小範圍，避免清單過長時難以定位。"
+      >
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="搜尋文件名稱、編號、部門或路徑…" style={{ ...inputStyle, flex:1, minWidth:240 }} />
+          {["全部", "一階文件", "二階文件", "三階文件"].map(item => (
+            <button key={item} onClick={() => setLevelFilter(item)} style={levelFilter===item ? buttonStyle("warning") : buttonStyle("secondary")}>{item}</button>
+          ))}
+        </div>
+      </PageIntro>
+
+      <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
+        {filterByLevel("一階文件") && (
+          <Panel title="第一層文件" description="以制度與手冊為主，適合快速看總則與管理原則。" accent="#a78bfa">
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))", gap:12 }}>
+              {filteredFirst.map(doc => <IsoDocumentCard key={doc.id} doc={doc} accent="#a78bfa" showPaths />)}
+            </div>
+          </Panel>
+        )}
+
+        {filterByLevel("二階文件") && (
+          <Panel title="第二層文件與其表單 / 記錄" description="從程序直接展開其表單和記錄，最適合做稽核追查與缺漏檢查。" accent="#60a5fa">
+            <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+              {filteredBundles.map(bundle => <IsoProcedureBundle key={bundle.procedure.id} bundle={bundle} showPaths />)}
+            </div>
+          </Panel>
+        )}
+
+        {filterByLevel("三階文件") && (
+          <Panel title="第三層文件" description="主要用來查看作業指導書與現場執行依據。" accent="#14b8a6">
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))", gap:12 }}>
+              {filteredThird.map(doc => <IsoDocumentCard key={doc.id} doc={doc} accent="#14b8a6" showPaths />)}
+            </div>
+          </Panel>
+        )}
+
+        {filteredFirst.length === 0 && filteredBundles.length === 0 && filteredThird.length === 0 && (
+          <div style={{ textAlign:"center", padding:"36px 20px", color:"#64748b", fontSize:14 }}>沒有符合篩選條件的文件。</div>
+        )}
+
+        <details style={{ background:uiTheme.panel, border:"1px solid " + uiTheme.panelBorder, borderRadius:18, padding:18, boxShadow: uiTheme.shadow }}>
+          <summary style={{ cursor:"pointer", fontSize:14, fontWeight:700, color:"#e2e8f0" }}>原始文件庫視圖</summary>
+          <div style={{ marginTop:18 }}>
+            <LibraryTab documents={documents} manuals={manuals} />
+          </div>
+        </details>
+      </div>
+    </div>
+  );
+}
+
+// ─── LIBRARY TAB ──────────────────────────────────────────────────────────────────────────────
+function LibraryTab({ documents, manuals }) {
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("全部");
+  const [preview, setPreview] = useState(null);
+
+  // Merge all docs with pdfs + manuals
+  const allItems = [
+    ...documents.filter(d => d.pdfPath),
+    ...manuals,
+  ];
+  const types = ["全部", "管理手冊", "管理程序", "作業指導書"];
+  const filtered = allItems.filter(d => {
+    const matchType = typeFilter === "全部" || d.type === typeFilter;
+    const q = search.toLowerCase();
+    const matchSearch = !q || d.name.toLowerCase().includes(q) || d.id.toLowerCase().includes(q) || (d.department||"").toLowerCase().includes(q);
+    return matchType && matchSearch;
+  });
+
+  const typeColor = t => t==="管理手冊"?"#a78bfa":t==="管理程序"?"#60a5fa":"#34d399";
+
+  return (
+    <div>
+      <SectionHeader title="文件庫（PDF 檔案）" count={allItems.length} color="#f97316" />
+      <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap" }}>
+        <StatCard label="管理手冊" value={allItems.filter(d=>d.type==="管理手冊").length} color="#a78bfa" />
+        <StatCard label="管理程序" value={allItems.filter(d=>d.type==="管理程序").length} color="#60a5fa" />
+        <StatCard label="作業指導書" value={allItems.filter(d=>d.type==="作業指導書").length} color="#34d399" />
+        <StatCard label="總計" value={allItems.length} color="#f97316" />
+      </div>
+
+      {/* Search & Filter bar */}
+      <div style={{ display:"flex", gap:10, marginBottom:18, flexWrap:"wrap" }}>
+        <input
+          type="text" value={search} onChange={e=>setSearch(e.target.value)}
+          placeholder="搜尋文件名稱、編號、部門…"
+          style={{ ...inputStyle, flex:1, minWidth:200, padding:"10px 14px" }}
+        />
+        <div style={{ display:"flex", gap:6 }}>
+          {types.map(t => (
+            <button key={t} onClick={()=>setTypeFilter(t)} style={{
+              background: typeFilter===t ? "linear-gradient(135deg,#ea580c,#f97316)" : "rgba(255,255,255,0.05)",
+              border: "1px solid " + (typeFilter===t ? "#f97316" : "rgba(255,255,255,0.1)"),
+              borderRadius:8, color: typeFilter===t?"#fff":"#94a3b8",
+              cursor:"pointer", padding:"8px 14px", fontSize:12, fontWeight:600
+            }}>{t}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Document Cards Grid */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(300px, 1fr))", gap:14 }}>
+        {filtered.map(doc => (
+          <div key={doc.id} style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:18, display:"flex", flexDirection:"column", gap:10 }}>
+            {/* Header */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+              <div style={{ fontSize:11, fontFamily:"monospace", color:"#60a5fa", fontWeight:700 }}>{doc.id}</div>
+              <Badge color={typeColor(doc.type)}>{doc.type}</Badge>
+            </div>
+            {/* Name */}
+            <div style={{ fontSize:14, fontWeight:700, color:"#e2e8f0", lineHeight:1.4 }}>{doc.name}</div>
+            {/* Description (for manuals) */}
+            {doc.desc && <div style={{ fontSize:12, color:"#64748b", lineHeight:1.5 }}>{doc.desc}</div>}
+            {/* Meta */}
+            <div style={{ display:"flex", gap:12, fontSize:11, color:"#64748b", flexWrap:"wrap" }}>
+              <span>版本: <b style={{color:"#4ade80"}}>v{doc.version}</b></span>
+              <span>部門: {doc.department}</span>
+              {doc.author && <span>作者: {doc.author}</span>}
+            </div>
+            {/* PDF button */}
+            <div style={{ display:"flex", gap:8, marginTop:4 }}>
+              <a
+                href={encodeURI(doc.pdfPath)} target="_blank" rel="noopener noreferrer"
+                style={{ flex:1, background:"linear-gradient(135deg,#dc2626,#ef4444)", color:"#fff",
+                  padding:"10px 0", borderRadius:8, fontSize:13, fontWeight:700,
+                  textDecoration:"none", textAlign:"center" }}
+              >
+                &#128196; 開啟 PDF
+              </a>
+              <button onClick={()=>setPreview(doc.pdfPath)} style={{
+                background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.15)",
+                borderRadius:8, color:"#94a3b8", cursor:"pointer",
+                padding:"10px 14px", fontSize:12, fontWeight:600
+              }}>預覽</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {filtered.length === 0 && (
+        <div style={{ textAlign:"center", padding:"40px 0", color:"#475569", fontSize:14 }}>未找到符合條件的文件</div>
+      )}
+
+      {/* PDF Preview Modal (iframe) */}
+      {preview && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:1000, display:"flex", flexDirection:"column" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 20px", background:"rgba(15,23,42,0.95)", borderBottom:"1px solid rgba(255,255,255,0.1)" }}>
+            <div style={{ fontSize:13, color:"#94a3b8", fontFamily:"monospace" }}>{preview.split("/").pop()}</div>
+            <div style={{ display:"flex", gap:10 }}>
+              <a href={encodeURI(preview)} target="_blank" rel="noopener noreferrer" style={{ background:"linear-gradient(135deg,#dc2626,#ef4444)", color:"#fff", padding:"6px 14px", borderRadius:7, fontSize:12, fontWeight:700, textDecoration:"none" }}>在新標籤開啟</a>
+              <button onClick={()=>setPreview(null)} style={{ background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", borderRadius:7, color:"#e2e8f0", cursor:"pointer", padding:"6px 14px", fontSize:13, fontWeight:700 }}>✕ 關閉</button>
+            </div>
+          </div>
+          <iframe
+            src={encodeURI(preview)}
+            style={{ flex:1, border:"none", background:"#fff" }}
+            title="PDF Preview"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── DASHBOARD HOME ──────────────────────────────────────────────────────────
+function DashboardHome({ instruments, documents, training, equipment, suppliers, nonConformances, auditPlans, envRecords, setActiveTab }) {
+  const now = new Date(); now.setHours(0,0,0,0);
+  const overdueInst = instruments.filter(i => daysUntil(i.nextCalibration) < 0).length;
+  const upcomingInst = instruments.filter(i => { const d=daysUntil(i.nextCalibration); return d>=0&&d<=30; }).length;
+  const overdueDoc = documents.filter(d => daysUntil(d.nextReview) < 0).length;
+  const expiredTrain = training.filter(t => daysUntil(t.validUntil) < 0).length;
+  const overdueEquip = equipment.filter(e => daysUntil(e.nextMaintenance) < 0).length;
+  const openNc = nonConformances.filter(n => n.status !== "已關閉").length;
+  const overdueNc = nonConformances.filter(n => n.status !== "已關閉" && daysUntil(n.dueDate) < 0).length;
+  const upcomingAudit = auditPlans.filter(a => a.status === "計畫中" && daysUntil(a.scheduledDate) >= 0 && daysUntil(a.scheduledDate) <= 30).length;
+  const envPassRate = envRecords.length > 0 ? Math.round(envRecords.filter(r => r.result === "合格").length / envRecords.length * 100) : 0;
+  const poorSupplier = suppliers.filter(s => s.score < 70).length;
+  const alerts = [];
+  if (overdueInst > 0) alerts.push({ type: "error", msg: `有 ${overdueInst} 个小器校正遇期，請立即安排試驗` });
+  if (upcomingInst > 0) alerts.push({ type: "warn", msg: `有 ${upcomingInst} 个小器將於 30 天內到期校正` });
+  if (overdueDoc > 0) alerts.push({ type: "error", msg: `有 ${overdueDoc} 份文件顆開複審遇期` });
+  if (expiredTrain > 0) alerts.push({ type: "error", msg: `有 ${expiredTrain} 檔員訓練認證已過期` });
+  if (overdueEquip > 0) alerts.push({ type: "error", msg: `有 ${overdueEquip} 台設備保養遇期` });
+  if (overdueNc > 0) alerts.push({ type: "error", msg: `有 ${overdueNc} 个不符合項目已逾期未關閉` });
+  if (upcomingAudit > 0) alerts.push({ type: "warn", msg: `${upcomingAudit} 場內部稽核將於 30 天內執行` });
+  if (poorSupplier > 0) alerts.push({ type: "warn", msg: `有 ${poorSupplier} 家供應商評分不足 70 分` });
+  if (envPassRate < 90) alerts.push({ type: "warn", msg: `潔淨室環境合格率僅 ${envPassRate}%` });
+  const kpis = [
+    { label: "校正小器", value: instruments.length, sub: overdueInst > 0 ? `${overdueInst}个遇期` : "全部正常", color: overdueInst > 0 ? "#ef4444" : "#60a5fa", tab: "calibration" },
+    { label: "程序文件", value: documents.length, sub: overdueDoc > 0 ? `${overdueDoc}份鸞期` : "全部有效", color: overdueDoc > 0 ? "#ef4444" : "#22c55e", tab: "documents" },
+    { label: "訓練記錄", value: training.length, sub: expiredTrain > 0 ? `${expiredTrain}人過期` : "全部有效", color: expiredTrain > 0 ? "#ef4444" : "#22c55e", tab: "training" },
+    { label: "設備保養", value: equipment.length, sub: overdueEquip > 0 ? `${overdueEquip}台鸞期` : "全部正常", color: overdueEquip > 0 ? "#ef4444" : "#22c55e", tab: "equipment" },
+    { label: "供應商", value: suppliers.length, sub: poorSupplier > 0 ? `${poorSupplier}家評分不足` : "全部合格", color: poorSupplier > 0 ? "#eab308" : "#22c55e", tab: "supplier" },
+    { label: "不符合項", value: nonConformances.length, sub: openNc > 0 ? `${openNc}個未關閉` : "全部已關閉", color: openNc > 0 ? "#ef4444" : "#22c55e", tab: "nonconformance" },
+    { label: "稽核計畫", value: auditPlans.length, sub: upcomingAudit > 0 ? `${upcomingAudit}地30天內執行` : "如期進行", color: upcomingAudit > 0 ? "#f97316" : "#8b5cf6", tab: "auditplan" },
+    { label: "環境監測", value: envRecords.length, sub: `合格率 ${envPassRate}%`, color: envPassRate >= 90 ? "#14b8a6" : envPassRate >= 80 ? "#eab308" : "#ef4444", tab: "environment" },
+  ];
+  return (
+    <div>
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 22, fontWeight: 800, color: "#e2e8f0", letterSpacing: 1 }}>潔沛企業有限公司 ISO 9001:2015</div>
+        <div style={{ fontSize: 14, color: "#64748b", marginTop: 4 }}>品質管理系統自動稽核主控台 — {new Date().toLocaleDateString("zh-TW", { year:"numeric", month:"long", day:"numeric" })}</div>
+      </div>
+      {alerts.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 13, color: "#94a3b8", fontWeight: 700, marginBottom: 10 }}>⚠ 系統警示 ({alerts.length})</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {alerts.map((a, i) => (
+              <div key={i} style={{ background: a.type==="error"?"rgba(239,68,68,0.08)":"rgba(234,179,8,0.08)", border: `1px solid ${a.type==="error"?"rgba(239,68,68,0.3)":"rgba(234,179,8,0.3)"}`, borderRadius: 10, padding: "10px 16px", fontSize: 13, color: a.type==="error"?"#fca5a5":"#fde68a", display:"flex", alignItems:"center", gap:8 }}>
+                <span>{a.type==="error"?"❌":"⚠️"}</span><span>{a.msg}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 14, marginBottom: 28 }}>
+        {kpis.map(k => (
+          <div key={k.tab} onClick={() => setActiveTab(k.tab)} style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${k.color}40`, borderRadius: 14, padding: "18px 20px", cursor: "pointer", transition: "all 0.2s" }}
+            onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.08)"}
+            onMouseLeave={e => e.currentTarget.style.background="rgba(255,255,255,0.04)"} >
+            <div style={{ fontSize: 28, fontWeight: 800, color: k.color, lineHeight: 1 }}>{k.value}</div>
+            <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 6 }}>{k.label}</div>
+            <div style={{ fontSize: 11, color: k.color, marginTop: 4, fontWeight: 600 }}>{k.sub}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 20 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", marginBottom: 14 }}>最近校正到期小器</div>
+          {[...instruments].sort((a,b) => daysUntil(a.nextCalibration)-daysUntil(b.nextCalibration)).slice(0,5).map(inst => (
+            <div key={inst.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
+              <div>
+                <div style={{ fontSize:13, color:"#e2e8f0" }}>{inst.name}</div>
+                <div style={{ fontSize:11, color:"#64748b" }}>{inst.id}</div>
+              </div>
+              <Badge color={urgencyColor(daysUntil(inst.nextCalibration))}>{urgencyLabel(daysUntil(inst.nextCalibration))}</Badge>
+            </div>
+          ))}
+        </div>
+        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 20 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", marginBottom: 14 }}>未關閉不符合項目</div>
+          {nonConformances.filter(n => n.status !== "已關閉").slice(0,5).map(nc => (
+            <div key={nc.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
+              <div>
+                <div style={{ fontSize:12, color:"#e2e8f0" }}>{nc.description.slice(0,20)}{nc.description.length>20?"...":""}</div>
+                <div style={{ fontSize:11, color:"#64748b" }}>{nc.id} — {nc.dept}</div>
+              </div>
+              <Badge color={daysUntil(nc.dueDate)===9999?"#64748b":daysUntil(nc.dueDate)<0?"#ef4444":daysUntil(nc.dueDate)<=7?"#eab308":"#60a5fa"}>{daysUntil(nc.dueDate)===9999?"無到期日":daysUntil(nc.dueDate)<0?"逾期":"剩"+daysUntil(nc.dueDate)+"天"}</Badge>
+            </div>
+          ))}
+          {nonConformances.filter(n=>n.status!=="已關閉").length===0 && <div style={{color:"#22c55e",fontSize:13,marginTop:8}}>✓ 目前沒有未關閉不符合項</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN APP ────────────────────────────────────────────────────────────────
+export default function App() {
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === "undefined") return "home";
+    const params = new URLSearchParams(window.location.search);
+    return params.get("google") ? "notification" : (params.get("tab") || "home");
+  });
+  const [instruments, setInstruments] = useState(initialInstruments);
+  const [documents, setDocuments] = useState(initialDocuments);
+  const [training, setTraining] = useState(initialTraining);
+  const [equipment, setEquipment] = useState(initialEquipment);
+  const [suppliers, setSuppliers] = useState(initialSuppliers);
+  const [nonConformances, setNonConformances] = useState(initialNonConformances);
+  const [auditPlans, setAuditPlans] = useState(initialAuditPlans);
+  const [envRecords, setEnvRecords] = useState(initialEnvRecords);
+  const [prodRecords, setProdRecords] = useState(() => loadStoredState("audit_prodrecords", initialProdRecords));
+  const [qualityRecords, setQualityRecords] = useState(() => loadStoredState("audit_qualityrecords", initialQualityRecords));
+  const [manuals] = useState(initialManuals);
+
+  useEffect(() => saveStoredState("audit_prodrecords", prodRecords), [prodRecords]);
+  useEffect(() => saveStoredState("audit_qualityrecords", qualityRecords), [qualityRecords]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadOpsData() {
+      try {
+        const [ncPayload, auditPayload, envPayload] = await Promise.all([
+          apiJson("/api/nonconformances"),
+          apiJson("/api/audit-plans"),
+          apiJson("/api/environment-records"),
+        ]);
+        if (cancelled) return;
+        setNonConformances(ncPayload.items || []);
+        setAuditPlans(auditPayload.items || []);
+        setEnvRecords(envPayload.items || []);
+      } catch (err) {
+        console.warn("Failed to load operation data", err);
+      }
+    }
+    loadOpsData();
+    return () => { cancelled = true; };
+  }, []);
+
+  const tabs = [
+    { id: "home",           label: "主控台",   icon: "⌂" },
+    { id: "calibration",    label: "校正管理", icon: "◎" },
+    { id: "documents",      label: "文件管理", icon: "≡" },
+    { id: "library",        label: "文件庫",   icon: "📂" },
+    { id: "training",       label: "訓練管理", icon: "□" },
+    { id: "equipment",      label: "設備保養", icon: "⚙" },
+    { id: "supplier",       label: "供應商管理", icon: "◈" },
+    { id: "nonconformance", label: "不符合管理", icon: "⚠" },
+    { id: "auditplan",      label: "稽核計畫", icon: "✓" },
+    { id: "environment",    label: "環境監測", icon: "◉" },
+    { id: "production",     label: "記錄匯出", icon: "R" },
+    { id: "notification",   label: "通知提醒", icon: "✉" },
+    { id: "aiworkbench",    label: "AI 工作台", icon: "AI" },
+    { id: "report",         label: "稽核報告", icon: "☰" },
+  ];
+
+  function renderTab() {
+    switch(activeTab) {
+      case "home":           return <DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setActiveTab} />;
+      case "calibration":    return <CalibrationTab instruments={instruments} setInstruments={setInstruments} />;
+      case "documents":      return <DocumentsManagerTab documents={documents} setDocuments={setDocuments} manuals={manuals} />;
+      case "library":        return <LibraryHierarchyTab documents={documents} manuals={manuals} />;
+      case "training":       return <TrainingTab training={training} setTraining={setTraining} />;
+      case "equipment":      return <EquipmentTab equipment={equipment} setEquipment={setEquipment} />;
+      case "supplier":       return <SupplierTab suppliers={suppliers} setSuppliers={setSuppliers} />;
+      case "nonconformance": return <NonConformanceTab nonConformances={nonConformances} setNonConformances={setNonConformances} />;
+      case "auditplan":      return <AuditPlanTab auditPlans={auditPlans} setAuditPlans={setAuditPlans} />;
+      case "environment":    return <EnvironmentTab envRecords={envRecords} setEnvRecords={setEnvRecords} />;
+    case "production":     return <ProductionTab envRecords={envRecords} prodRecords={prodRecords} setProdRecords={setProdRecords} qualityRecords={qualityRecords} setQualityRecords={setQualityRecords} nonConformances={nonConformances} />;
+      case "notification":   return <NotificationTab instruments={instruments} documents={documents} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} />;
+      case "aiworkbench":    return <AIWorkbenchTab documents={documents} manuals={manuals} nonConformances={nonConformances} />;
+      case "report":         return <ReportTab instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} />;
+      default:               return <DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setActiveTab} />;
+    }
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at top left, rgba(14,165,233,0.08), transparent 26%), linear-gradient(135deg, #08101f 0%, #0b1220 45%, #080d18 100%)", color: "#e2e8f0", fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 20, background: "rgba(8,15,30,0.88)", borderBottom: "1px solid rgba(148,163,184,0.12)", backdropFilter: "blur(16px)", padding: "0 24px", boxShadow: "0 10px 30px rgba(2,6,23,0.18)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 18, overflowX: "auto" }}>
+          <div style={{ padding: "14px 0", minWidth: 170 }}>
+            <div style={{ fontSize: 11, letterSpacing: 1.4, textTransform: "uppercase", color: "#7dd3fc", fontWeight: 800 }}>Jepei QMS</div>
+            <div style={{ fontSize: 15, color: "#e2e8f0", fontWeight: 800, marginTop: 4 }}>品質稽核工作台</div>
+          </div>
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+              background: activeTab === t.id ? "rgba(56,189,248,0.14)" : "transparent",
+              border: activeTab === t.id ? "1px solid rgba(56,189,248,0.28)" : "1px solid transparent",
+              cursor: "pointer",
+              padding: "10px 14px",
+              fontSize: 12,
+              fontWeight: 700,
+              color: activeTab === t.id ? "#dbeafe" : "#94a3b8",
+              borderRadius: 12,
+              whiteSpace: "nowrap",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              transition: "all 0.2s ease",
+              margin: "10px 0",
+            }}>
+              <span style={{ fontSize: 12, minWidth: 24, height: 24, display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 999, background: activeTab === t.id ? "rgba(59,130,246,0.18)" : "rgba(255,255,255,0.06)" }}>{t.icon}</span>
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ maxWidth: 1460, margin: "0 auto", padding: "28px 24px 40px" }}>
+        {renderTab()}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+sqlalchemy
+alembic
+pydantic
+httpx
+python-multipart
+openpyxl
+python-docx
+pypdf
+psycopg[binary]
