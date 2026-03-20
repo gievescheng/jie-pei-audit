@@ -4,3 +4,8 @@ sqlalchemy
 alembic
 pydantic
 psycopg[binary]
+flask
+requests
+python-docx
+openpyxl
+pypdf
