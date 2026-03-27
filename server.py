@@ -631,6 +631,20 @@ def api_record_engine_suggest():
         return jsonify({'error': str(exc)}), 500
 
 
+@app.route('/api/record-engine/precheck', methods=['POST'])
+def api_record_engine_precheck():
+    try:
+        import record_engine
+
+        body = request.get_json(force=True) or {}
+        return jsonify({'result': record_engine.precheck_template(body)})
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        traceback.print_exc()
+        return jsonify({'error': str(exc)}), 500
+
+
 @app.route('/api/record-engine/generate', methods=['POST'])
 def api_record_engine_generate():
     try:
@@ -838,9 +852,37 @@ def google_calendar_logout():
     return jsonify(google_status_payload())
 
 
+def kill_port(port: int) -> None:
+    """啟動前清除佔用指定 port 的舊 Python 程序（Windows）"""
+    import subprocess
+    current_pid = os.getpid()
+    try:
+        result = subprocess.run(
+            ['netstat', '-ano'], capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.splitlines():
+            if f':{port}' in line and 'LISTENING' in line:
+                parts = line.split()
+                if not parts:
+                    continue
+                try:
+                    pid = int(parts[-1])
+                except ValueError:
+                    continue
+                if pid != current_pid:
+                    subprocess.run(
+                        ['taskkill', '/F', '/PID', str(pid)],
+                        capture_output=True, timeout=5
+                    )
+                    print(f'[cleanup] 已關閉舊程序 PID {pid}（port {port}）')
+    except Exception:
+        pass
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8888))
     host = os.environ.get('HOST', '127.0.0.1')
+    kill_port(port)
     print(f'[server] http://{host}:{port}')
     print(f'[base] {BASE_DIR}')
     for warning in startup_security_warnings(host):

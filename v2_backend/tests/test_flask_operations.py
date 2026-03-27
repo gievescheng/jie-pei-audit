@@ -220,6 +220,7 @@ class FlaskOperationsTest(unittest.TestCase):
         self.assertEqual(catalog_response.status_code, 200)
         catalog = catalog_response.get_json()["templates"]
         codes = {item["code"] for item in catalog}
+        self.assertIn("env_monthly_pack", codes)
         self.assertIn("shipping_pack", codes)
         self.assertIn("cip_152", codes)
 
@@ -240,6 +241,26 @@ class FlaskOperationsTest(unittest.TestCase):
         suggested = suggest_response.get_json()["templates"]
         self.assertGreater(len(suggested), 0)
         self.assertEqual(suggested[0]["code"], "shipping_pack")
+        shipping_pack = next(item for item in catalog if item["code"] == "shipping_pack")
+        self.assertEqual(shipping_pack["included_templates"], ["14.3 出貨單", "12.5 出貨檢查紀錄表", "14.5 出貨檢查表"])
+        env_monthly_pack = next(item for item in catalog if item["code"] == "env_monthly_pack")
+        self.assertEqual(env_monthly_pack["included_templates"], ["6.1 環境監控記錄表"])
+        cip_pack = next(item for item in catalog if item["code"] == "cip_pack")
+        self.assertEqual(cip_pack["included_templates"], ["15.2 製程缺陷追蹤改善(CIP)紀錄表"])
+
+        env_suggest_response = self.client.post(
+            "/api/record-engine/suggest",
+            json={
+                "prompt": "請幫我整理環境監控月報",
+                "context": {
+                    "env_count": 5,
+                },
+            },
+        )
+        self.assertEqual(env_suggest_response.status_code, 200)
+        env_suggested = env_suggest_response.get_json()["templates"]
+        self.assertGreater(len(env_suggested), 0)
+        self.assertEqual(env_suggested[0]["code"], "env_monthly_pack")
 
         material_response = self.client.post(
             "/api/record-engine/generate",
@@ -261,6 +282,83 @@ class FlaskOperationsTest(unittest.TestCase):
             },
         )
         self.assertEqual(material_response.status_code, 200)
+
+    def test_record_engine_precheck(self):
+        incomplete_response = self.client.post(
+            "/api/record-engine/precheck",
+            json={
+                "template_code": "shipment_order_143",
+                "shipment_request": {
+                    "order_no": "4515994888",
+                    "date": "",
+                    "department": "",
+                    "requester": "",
+                    "product_name": "",
+                    "quantity": "",
+                },
+            },
+        )
+        self.assertEqual(incomplete_response.status_code, 200)
+        incomplete_result = incomplete_response.get_json()["result"]
+        self.assertFalse(incomplete_result["ready"])
+        self.assertIn("出貨日期", incomplete_result["missing_items"])
+        self.assertIn("申請部門", incomplete_result["missing_items"])
+
+        complete_response = self.client.post(
+            "/api/record-engine/precheck",
+            json={
+                "template_code": "shipping_pack",
+                "prod_records": [{"lot": "0318-1", "customer": "C001"}],
+                "quality_records": [{"materialName": "WAFER", "batchNo": "B-01"}],
+                "shipment_request": {
+                    "order_no": "4515994888",
+                    "date": "2026-03-19",
+                    "department": "資材課",
+                    "requester": "測試員",
+                    "product_name": "RECYCLE GLASS NEG ABC-1 (JEPE)",
+                    "quantity": "200",
+                },
+            },
+        )
+        self.assertEqual(complete_response.status_code, 200)
+        complete_result = complete_response.get_json()["result"]
+        self.assertTrue(complete_result["ready"])
+        self.assertEqual(len(complete_result["included_templates"]), 3)
+
+        cip_pack_response = self.client.post(
+            "/api/record-engine/precheck",
+            json={
+                "template_code": "cip_pack",
+                "nonconformance": {
+                    "id": "NC-TEST-001",
+                    "date": "2026-03-01",
+                    "dept": "品管課",
+                    "description": "玻璃破片流出",
+                    "responsible": "王小明",
+                },
+            },
+        )
+        self.assertEqual(cip_pack_response.status_code, 200)
+        cip_pack_result = cip_pack_response.get_json()["result"]
+        self.assertTrue(cip_pack_result["ready"])
+        self.assertEqual(len(cip_pack_result["included_templates"]), 1)
+        self.assertIn("嚴重度", "\n".join(cip_pack_result["warnings"]))
+
+        env_pack_response = self.client.post(
+            "/api/record-engine/precheck",
+            json={
+                "template_code": "env_monthly_pack",
+                "env_records": [
+                    {"date": "2025-11-14", "dateTime": "2025-11-14 11:22:50", "point": "1", "location": "粒子計數點 1", "particles03": 16, "particles05": 10, "particles5": 3, "result": "合格"},
+                    {"date": "2025-11-15", "dateTime": "2025-11-15 09:10:11", "point": "2", "location": "粒子計數點 2", "particles03": 1800, "particles05": 900, "particles5": 40, "result": "不合格"},
+                ],
+            },
+        )
+        self.assertEqual(env_pack_response.status_code, 200)
+        env_pack_result = env_pack_response.get_json()["result"]
+        self.assertTrue(env_pack_result["ready"])
+        self.assertEqual(len(env_pack_result["included_templates"]), 1)
+        self.assertIn("月報摘要", "\n".join(env_pack_result["warnings"]))
 
     def test_production_record_upload_import(self):
         wb = Workbook()
@@ -353,8 +451,17 @@ class FlaskOperationsTest(unittest.TestCase):
         self.assertEqual(cip_response.status_code, 200)
         wb = load_workbook(io.BytesIO(cip_response.data))
         ws = wb.active
-        self.assertEqual(ws["A3"].value, "製程異常")
-        self.assertEqual(ws["I3"].value, "王小明")
+        self.assertEqual(ws["A3"].value, "不符合類型")
+        self.assertEqual(ws["B3"].value, "製程異常")
+        self.assertEqual(ws["A8"].value, "問題描述")
+        self.assertEqual(ws["B8"].value, "玻璃破片流出")
+        self.assertEqual(ws["A12"].value, "到期日")
+        self.assertEqual(ws["B12"].value, "2026-03-10")
+        self.assertEqual(ws["A13"].value, "狀態")
+        self.assertEqual(ws["B13"].value, "進行中")
+        self.assertIn("改善追蹤", wb.sheetnames)
+        follow_ws = wb["改善追蹤"]
+        self.assertEqual(follow_ws["A2"].value, "問題描述")
         wb.close()
 
         shipping_pack_response = self.client.post(
@@ -382,6 +489,64 @@ class FlaskOperationsTest(unittest.TestCase):
         self.assertEqual(len(names), 3)
         self.assertTrue(any("出貨單" in name for name in names))
         self.assertTrue(any("出貨檢查紀錄表" in name for name in names))
+
+        cip_pack_response = self.client.post(
+            "/api/record-engine/generate",
+            json={
+                "template_code": "cip_pack",
+                "nonconformance": {
+                    "id": "NC-TEST-001",
+                    "date": "2026-03-01",
+                    "dept": "品管課",
+                    "type": "製程異常",
+                    "description": "玻璃破片流出",
+                    "rootCause": "作業中碰撞到 FOSB",
+                    "correctiveAction": "重新教育訓練並加嚴檢查",
+                    "responsible": "王小明",
+                    "dueDate": "2026-03-10",
+                    "status": "進行中",
+                },
+            },
+        )
+        self.assertEqual(cip_pack_response.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(cip_pack_response.data)) as archive:
+            names = set(archive.namelist())
+            summary_name = next(name for name in names if "不符合來源摘要" in name)
+            summary_wb = load_workbook(io.BytesIO(archive.read(summary_name)))
+        self.assertEqual(len(names), 2)
+        self.assertTrue(any("CIP紀錄表" in name for name in names))
+        self.assertTrue(any("不符合來源摘要" in name for name in names))
+        summary_ws = summary_wb.active
+        self.assertEqual(summary_ws["A8"].value, "問題描述")
+        self.assertEqual(summary_ws["A14"].value, "結案日期")
+        summary_wb.close()
+
+        env_pack_response = self.client.post(
+            "/api/record-engine/generate",
+            json={
+                "template_code": "env_monthly_pack",
+                "env_records": [
+                    {"date": "2025-11-14", "dateTime": "2025-11-14 11:22:50", "point": "1", "location": "粒子計數點 1", "particles03": 16, "particles05": 10, "particles5": 3, "operator": "王小明", "result": "合格"},
+                    {"date": "2025-11-15", "dateTime": "2025-11-15 09:10:11", "point": "2", "location": "粒子計數點 2", "particles03": 1800, "particles05": 900, "particles5": 40, "operator": "陳小華", "result": "不合格"},
+                ],
+            },
+        )
+        self.assertEqual(env_pack_response.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(env_pack_response.data)) as archive:
+            names = set(archive.namelist())
+            summary_name = next(name for name in names if "環境監控月報" in name)
+            detail_name = next(name for name in names if "環境監控記錄表" in name)
+            summary_wb = load_workbook(io.BytesIO(archive.read(summary_name)))
+            detail_wb = load_workbook(io.BytesIO(archive.read(detail_name)))
+        self.assertEqual(len(names), 2)
+        self.assertEqual(summary_wb.active["A1"].value, "6 工作環境監控月報摘要")
+        self.assertEqual(summary_wb.active["B3"].value, 2)
+        self.assertIn("日別統計", summary_wb.sheetnames)
+        self.assertIn("點位統計", summary_wb.sheetnames)
+        self.assertEqual(detail_wb.active["A1"].value, "日期")
+        self.assertEqual(detail_wb.active["B2"].value, "1")
+        summary_wb.close()
+        detail_wb.close()
 
     def test_existing_production_and_quality_record_read(self):
         prod_wb = Workbook()

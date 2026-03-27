@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ISO 9001 Audit Dashboard</title>
+  <title>潔沛企業有限公司 ─ ISO 9001:2015 自動稽核系統</title>
   <script src="./vendor/react.production.min.js"></script>
   <script src="./vendor/react-dom.production.min.js"></script>
   <script src="./vendor/babel.min.js"></script>
@@ -27,7 +27,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel" data-presets="react">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 // ─── INITIAL DATA ─────────────────────────────────────────────────────────────
 // 儀器資料來源：5 量測資源管理程序/記錄/9.1量規儀器一覽表.docx
 // 校驗計畫：9.3 115年度校驗計劃表.docx
@@ -739,6 +739,56 @@ function Badge({ color, children }) {
   );
 }
 
+class PageErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error("PageErrorBoundary", this.props.pageName || "page", error, info);
+  }
+
+  resetPageState = () => {
+    try {
+      const keys = Array.isArray(this.props.storageKeys) ? this.props.storageKeys : [];
+      keys.forEach((key) => window.localStorage.removeItem(key));
+    } catch (err) {
+      console.warn("Failed to clear page storage", err);
+    }
+    if (typeof window !== "undefined") {
+      window.location.reload();
+    }
+  };
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div style={{ background:"rgba(127,29,29,0.18)", border:"1px solid rgba(248,113,113,0.35)", borderRadius:18, padding:24, color:"#fee2e2" }}>
+        <div style={{ fontSize:24, fontWeight:800, marginBottom:10 }}>???????????</div>
+        <div style={{ fontSize:14, lineHeight:1.8, color:"#fecaca", marginBottom:14 }}>
+          {this.props.pageName || "????"} ???????????????????????????????????
+        </div>
+        <div style={{ fontSize:13, color:"#fde68a", marginBottom:16 }}>
+          ?????{String(this.state.error && this.state.error.message || this.state.error || "????")}
+        </div>
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+          <button onClick={this.resetPageState} style={{ background:"linear-gradient(135deg,#dc2626,#ef4444)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700 }}>
+            ???????????
+          </button>
+          <button onClick={() => window.location.href='/?tab=home'} style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700 }}>
+            ?????
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
 function StatCard({ label, value, color, sub }) {
   return (
     <div style={{
@@ -1364,7 +1414,7 @@ function SupplierTab({ suppliers, setSuppliers }) {
 }
 
 // ─── NON-CONFORMANCE TAB (MP-15) ─────────────────────────────────────────────
-function NonConformanceTab({ nonConformances: items, setNonConformances: setItems }) {
+function NonConformanceTab({ nonConformances: items, setNonConformances: setItems, highlightNcId, onHighlightDone }) {
   const emptyDraft = { id:"", date:"", dept:"", type:"製程異常", description:"", severity:"輕微", rootCause:"", correctiveAction:"", responsible:"", dueDate:"", status:"待處理", closeDate:"", effectiveness:"" };
   const [modal, setModal] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -1373,6 +1423,24 @@ function NonConformanceTab({ nonConformances: items, setNonConformances: setItem
   const [busy, setBusy] = useState("");
   const [importDraft, setImportDraft] = useState(null);
   const [importMissing, setImportMissing] = useState([]);
+  const rowRefs = useRef({});
+
+  useEffect(() => {
+    if (!highlightNcId) return;
+    const el = rowRefs.current[highlightNcId];
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.style.outline = "2px solid #f59e0b";
+      el.style.outlineOffset = "3px";
+      el.style.transition = "outline 0.2s";
+      const t = setTimeout(() => {
+        el.style.outline = "";
+        el.style.outlineOffset = "";
+        onHighlightDone?.();
+      }, 2500);
+      return () => clearTimeout(t);
+    }
+  }, [highlightNcId]);
 
   const statusColor = s => s==="已關閉"?"#22c55e":s==="處理中"?"#f97316":s==="待處理"?"#ef4444":"#eab308";
   const sevColor = s => s==="重大"?"#ef4444":s==="中度"?"#eab308":"#60a5fa";
@@ -1473,7 +1541,7 @@ function NonConformanceTab({ nonConformances: items, setNonConformances: setItem
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {enriched.map(item => (
-          <div key={item.id} style={{ background: item.overdue?"rgba(239,68,68,0.12)":"rgba(255,255,255,0.03)", border: `1px solid ${item.overdue?"rgba(239,68,68,0.3)":"rgba(255,255,255,0.08)"}`, borderRadius: 12, padding: "14px 18px" }}>
+          <div key={item.id} ref={el => { rowRefs.current[item.id] = el; }} style={{ background: item.overdue?"rgba(239,68,68,0.12)":"rgba(255,255,255,0.03)", border: `1px solid ${item.overdue?"rgba(239,68,68,0.3)":"rgba(255,255,255,0.08)"}`, borderRadius: 12, padding: "14px 18px" }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 260 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
@@ -1909,7 +1977,13 @@ function EnvironmentTab({ envRecords, setEnvRecords }) {
   );
 }
 
-function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords, setQualityRecords, nonConformances }) {
+function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords, setQualityRecords, nonConformances, auditPlans, setActiveTab, setHighlightNcId }) {
+  const objectRows = (value) => Array.isArray(value) ? value.filter(item => item && typeof item === "object") : [];
+  const safeEnvRecords = objectRows(envRecords);
+  const safeProdRecords = objectRows(prodRecords);
+  const safeQualityRecords = objectRows(qualityRecords);
+  const safeNonConformances = objectRows(nonConformances);
+  const safeAuditPlans = objectRows(auditPlans);
   const [downloadType, setDownloadType] = useState("");
   const [message, setMessage] = useState("");
   const [shipmentOrders, setShipmentOrders] = useState([]);
@@ -1925,8 +1999,31 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
   const [engineSuggestions, setEngineSuggestions] = useState([]);
   const [engineBusy, setEngineBusy] = useState(false);
   const [engineMessage, setEngineMessage] = useState("");
+  const [enginePrecheck, setEnginePrecheck] = useState(null);
+  const [enginePrecheckBusy, setEnginePrecheckBusy] = useState(false);
   const [selectedNcId, setSelectedNcId] = useState("");
   const [recordReadBusy, setRecordReadBusy] = useState("");
+  const [prodStartDate, setProdStartDate] = useState("");
+  const [prodEndDate, setProdEndDate] = useState("");
+  const [prodSiteFilter, setProdSiteFilter] = useState("ALL");
+  const [prodSearch, setProdSearch] = useState("");
+  const [expandedProdGroups, setExpandedProdGroups] = useState({});
+  const [qualitySearch, setQualitySearch] = useState("");
+  const [qualityResultFilter, setQualityResultFilter] = useState("ALL");
+  const [expandedQualityGroups, setExpandedQualityGroups] = useState({});
+  const prodSectionRef = useRef(null);
+  const qualitySectionRef = useRef(null);
+  const shipmentSectionRef = useRef(null);
+  const shipmentFieldRefs = {
+    date: useRef(null),
+    department: useRef(null),
+    requester: useRef(null),
+    product_name: useRef(null),
+    quantity: useRef(null),
+    spec: useRef(null),
+    unit: useRef(null),
+    batch_display: useRef(null),
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -1973,11 +2070,19 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
     return () => { cancelled = true; };
   }, []);
 
+  const [selectedAuditId, setSelectedAuditId] = useState("");
+
   useEffect(() => {
-    if (!selectedNcId && nonConformances && nonConformances.length > 0) {
-      setSelectedNcId(nonConformances[0].id);
+    if (!selectedNcId && safeNonConformances.length > 0) {
+      setSelectedNcId(safeNonConformances[0].id);
     }
-  }, [nonConformances, selectedNcId]);
+  }, [safeNonConformances, selectedNcId]);
+
+  useEffect(() => {
+    if (!selectedAuditId && safeAuditPlans.length > 0) {
+      setSelectedAuditId(safeAuditPlans[0].id);
+    }
+  }, [safeAuditPlans, selectedAuditId]);
 
   const selectedOrder = shipmentOrders.find(item => item.order_no === shipmentOrderNo) || null;
 
@@ -2094,25 +2199,28 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
   }
 
   function buildEnginePayload() {
-    const selectedNc = (nonConformances || []).find(item => item.id === selectedNcId) || (nonConformances || [])[0] || null;
+    const selectedNc = safeNonConformances.find(item => item.id === selectedNcId) || safeNonConformances[0] || null;
     return {
       template_code: engineTemplateCode,
       prompt: enginePrompt,
-      env_records: envRecords,
-      prod_records: prodRecords,
-      quality_records: qualityRecords,
+      env_records: safeEnvRecords,
+      prod_records: safeProdRecords,
+      quality_records: safeQualityRecords,
       shipment_request: {
         order_no: shipmentOrderNo,
         selected_lots: selectedLots,
         ...shipmentForm,
       },
       nonconformance: selectedNc,
+      audit_plans: safeAuditPlans,
+      selected_audit_id: selectedAuditId,
     };
   }
 
   async function suggestRecordTemplates() {
     setEngineBusy(true);
     setEngineMessage("");
+    setEnginePrecheck(null);
     try {
       const response = await fetch("/api/record-engine/suggest", {
         method: "POST",
@@ -2124,7 +2232,7 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
             prod_count: prodRecords.length,
             quality_count: qualityRecords.length,
             shipment_order_count: shipmentOrders.length,
-            nonconformance_count: (nonConformances || []).length,
+            nonconformance_count: safeNonConformances.length,
           },
         }),
       });
@@ -2145,7 +2253,38 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
     }
   }
 
+  async function precheckRecordTemplate() {
+    setEnginePrecheckBusy(true);
+    setEngineMessage("");
+    try {
+      const response = await fetch("/api/record-engine/precheck", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildEnginePayload()),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
+      const result = payload.result || null;
+      setEnginePrecheck(result);
+      if (result && result.ready) {
+        setEngineMessage("預檢完成：目前資料可以產生草稿。");
+      } else if (result) {
+        setEngineMessage("預檢完成：請先補齊必填欄位。");
+      } else {
+        setEngineMessage("預檢完成，但沒有取得結果。");
+      }
+    } catch (err) {
+      setEngineMessage("預檢失敗: " + err.message);
+    } finally {
+      setEnginePrecheckBusy(false);
+    }
+  }
+
   async function generateEngineRecord() {
+    if (enginePrecheck && enginePrecheck.ready === false) {
+      setEngineMessage("目前仍有必填欄位未完成，請先依預檢結果補值。");
+      return;
+    }
     setEngineBusy(true);
     setEngineMessage("");
     try {
@@ -2166,6 +2305,55 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
       setEngineMessage("產生紀錄失敗: " + err.message);
     } finally {
       setEngineBusy(false);
+    }
+  }
+
+  function jumpToMissingDetail(detail) {
+    if (!detail || typeof window === "undefined") return;
+    const focusField = (refObject) => {
+      const el = refObject && refObject.current;
+      if (!el) return false;
+      el.focus();
+      if (typeof el.scrollIntoView === "function") {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      return true;
+    };
+
+    const scrollToRef = (refObject) => {
+      const el = refObject && refObject.current;
+      if (!el || typeof el.scrollIntoView !== "function") return false;
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      return true;
+    };
+
+    if (detail.scope === "production") {
+      scrollToRef(prodSectionRef);
+      setEngineMessage("已定位到生產批次區塊，請先補上生產資料。");
+      return;
+    }
+    if (detail.scope === "quality") {
+      scrollToRef(qualitySectionRef);
+      setEngineMessage("已定位到進料檢驗區塊，請先補上品質資料。");
+      return;
+    }
+    if (detail.scope === "shipment") {
+      scrollToRef(shipmentSectionRef);
+      const fieldRef = shipmentFieldRefs[detail.field_key];
+      if (fieldRef) {
+        setTimeout(() => focusField(fieldRef), 120);
+      }
+      setEngineMessage("已定位到出貨單草稿欄位：" + (detail.label || detail.field_key));
+      return;
+    }
+    if (detail.scope === "nonconformance") {
+      setActiveTab("nonconformance");
+      if (selectedNcId) setHighlightNcId(selectedNcId);
+      return;
+    }
+    if (detail.scope === "environment") {
+      setActiveTab("environment");
+      return;
     }
   }
 
@@ -2217,9 +2405,227 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
     }
   }
 
-  const prodLowYield = prodRecords.filter(row => Number(row.yieldRate) < 95).length;
-  const qualityNg = qualityRecords.filter(row => ["NG", "FAIL"].includes(String(row.result).toUpperCase())).length;
-  const envWarning = envRecords.filter(row => row.result && row.result !== "合格").length;
+  const prodLowYield = safeProdRecords.filter(row => Number(row?.yieldRate) < 95).length;
+  const qualityNg = safeQualityRecords.filter(row => ["NG", "FAIL"].includes(String(row?.result || "").toUpperCase())).length;
+  const envWarning = safeEnvRecords.filter(row => row.result && row.result !== "合格").length;
+
+  const normalizeDateText = (value) => {
+    const source = String(value || "").trim();
+    if (!source) return "";
+    const normalized = source.replace(/\//g, "-");
+    const match = normalized.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (match) {
+      return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+    }
+    return normalized;
+  };
+
+  const extractProdSite = (row) => {
+    const note = String(row?.note || "");
+    const siteMatch = note.match(/site\s*:\s*([a-z0-9_-]+)/i);
+    if (siteMatch) return siteMatch[1].toUpperCase();
+    const lot = String(row?.lot || "");
+    const lotMatch = lot.match(/([A-Z]{2,5})$/);
+    if (lotMatch) return lotMatch[1].toUpperCase();
+    return "未填站點";
+  };
+
+  const getProdRowIssues = (row) => {
+    const issues = [];
+    if (!String(row?.lot || "").trim()) issues.push("批號");
+    if (!String(row?.customer || "").trim()) issues.push("客戶");
+    if (!String(row?.product || "").trim()) issues.push("產品");
+    if (!(Number(row?.input) > 0)) issues.push("投入數");
+    if (!String(row?.operator || "").trim()) issues.push("作業員");
+    return issues;
+  };
+
+  const prodRows = safeProdRecords.map((row, index) => ({
+    row,
+    index,
+    normalizedDate: normalizeDateText(row.date || row.recordDate || row.created_at || ""),
+    site: extractProdSite(row),
+  }));
+
+  const prodSiteOptions = Array.from(new Set(prodRows.map(item => item.site))).sort((a, b) => a.localeCompare(b, "zh-Hant"));
+  const prodDateOptions = Array.from(new Set(prodRows.map(item => item.normalizedDate).filter(Boolean))).sort();
+  const prodSearchKeyword = prodSearch.trim().toLowerCase();
+  const filteredProdRows = prodRows.filter(({ row, normalizedDate, site }) => {
+    if ((prodStartDate || prodEndDate) && !normalizedDate) return false;
+    if (prodStartDate && normalizedDate < prodStartDate) return false;
+    if (prodEndDate && normalizedDate > prodEndDate) return false;
+    if (prodSiteFilter !== "ALL" && site !== prodSiteFilter) return false;
+    if (!prodSearchKeyword) return true;
+    const haystack = [
+      row.lot,
+      row.customer,
+      row.product,
+      row.operator,
+      row.note,
+      site,
+    ].join(" ").toLowerCase();
+    return haystack.includes(prodSearchKeyword);
+  });
+
+  const prodGroups = filteredProdRows.reduce((acc, item) => {
+    const dateLabel = item.normalizedDate || "未填日期";
+    const key = `${dateLabel}__${item.site}`;
+    if (!acc[key]) {
+      acc[key] = {
+        key,
+        date: dateLabel,
+        site: item.site,
+        items: [],
+        totalInput: 0,
+        totalGood: 0,
+        totalDefect: 0,
+        issueCount: 0,
+      };
+    }
+    acc[key].items.push(item);
+    acc[key].totalInput += Number(item.row.input) || 0;
+    acc[key].totalGood += Number(item.row.good) || 0;
+    acc[key].totalDefect += Number(item.row.defect) || 0;
+    acc[key].issueCount += getProdRowIssues(item.row).length > 0 ? 1 : 0;
+    return acc;
+  }, {});
+
+  const prodGroupList = Object.values(prodGroups)
+    .map(group => ({
+      ...group,
+      avgYield: group.totalInput ? Number(((group.totalGood / group.totalInput) * 100).toFixed(1)) : 0,
+    }))
+    .sort((a, b) => `${b.date} ${b.site}`.localeCompare(`${a.date} ${a.site}`));
+
+  const latestProdDate = prodDateOptions.length ? prodDateOptions[prodDateOptions.length - 1] : "";
+
+  const setProdPresetRange = (preset) => {
+    if (!prodDateOptions.length) return;
+    if (preset === "all") {
+      setProdStartDate("");
+      setProdEndDate("");
+      return;
+    }
+    if (preset === "latest") {
+      setProdStartDate(latestProdDate);
+      setProdEndDate(latestProdDate);
+      return;
+    }
+    const days = preset === "7d" ? 7 : 30;
+    const latest = new Date(`${latestProdDate}T00:00:00`);
+    if (Number.isNaN(latest.getTime())) return;
+    const start = new Date(latest);
+    start.setDate(start.getDate() - (days - 1));
+    const fmt = (value) => {
+      const year = value.getFullYear();
+      const month = String(value.getMonth() + 1).padStart(2, "0");
+      const day = String(value.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+    setProdStartDate(fmt(start));
+    setProdEndDate(latestProdDate);
+  };
+
+  const toggleProdGroup = (key) => {
+    setExpandedProdGroups(prev => ({ ...prev, [key]: !(prev[key] ?? false) }));
+  };
+
+  const toggleAllProdGroups = (expanded) => {
+    const next = {};
+    prodGroupList.forEach(group => {
+      next[group.key] = expanded;
+    });
+    setExpandedProdGroups(next);
+  };
+
+  const getQualityRowIssues = (row) => {
+    const issues = [];
+    if (!String(row?.materialName || "").trim()) issues.push("材料名稱");
+    if (!String(row?.batchNo || "").trim()) issues.push("批號");
+    if (!String(row?.spec || "").trim()) issues.push("規格");
+    if (!String(row?.result || "").trim()) issues.push("結果");
+    return issues;
+  };
+
+  const qualityRows = safeQualityRecords.map((row, index) => ({
+    row,
+    index,
+    materialName: String(row.materialName || "未填材料").trim() || "未填材料",
+    resultLabel: String(row.result || "未判定").trim() || "未判定",
+    normalizedResult: (String(row.result || "").trim() || "未判定").toUpperCase(),
+  }));
+
+  const qualitySearchKeyword = qualitySearch.trim().toLowerCase();
+  const normalizedQualityFilter = String(qualityResultFilter || "ALL").toUpperCase();
+  const filteredQualityRows = qualityRows.filter(({ row, materialName, resultLabel, normalizedResult }) => {
+    if (normalizedQualityFilter !== "ALL" && normalizedResult !== normalizedQualityFilter) return false;
+    if (!qualitySearchKeyword) return true;
+    const haystack = [
+      materialName,
+      row.batchNo,
+      row.spec,
+      row.note,
+      resultLabel,
+    ].join(" ").toLowerCase();
+    return haystack.includes(qualitySearchKeyword);
+  });
+
+  const qualityGroups = filteredQualityRows.reduce((acc, item) => {
+    if (!acc[item.materialName]) {
+      acc[item.materialName] = {
+        key: item.materialName,
+        materialName: item.materialName,
+        items: [],
+        ngCount: 0,
+        issueCount: 0,
+      };
+    }
+    acc[item.materialName].items.push(item);
+    if (["NG", "FAIL"].includes(item.resultLabel.toUpperCase())) acc[item.materialName].ngCount += 1;
+    if (getQualityRowIssues(item.row).length > 0) acc[item.materialName].issueCount += 1;
+    return acc;
+  }, {});
+
+  const qualityGroupList = Object.values(qualityGroups).sort((a, b) => a.materialName.localeCompare(b.materialName, "zh-Hant"));
+  const filteredQualityNg = filteredQualityRows.filter(item => ["NG", "FAIL"].includes(item.resultLabel.toUpperCase())).length;
+
+  const toggleQualityGroup = (key) => {
+    setExpandedQualityGroups(prev => ({ ...prev, [key]: !(prev[key] ?? false) }));
+  };
+
+  const toggleAllQualityGroups = (expanded) => {
+    const next = {};
+    qualityGroupList.forEach(group => {
+      next[group.key] = expanded;
+    });
+    setExpandedQualityGroups(next);
+  };
+
+  const getShipmentFormIssues = () => {
+    const issues = [];
+    if (!String(shipmentForm.date || "").trim()) issues.push("日期");
+    if (!String(shipmentForm.department || "").trim()) issues.push("部門");
+    if (!String(shipmentForm.requester || "").trim()) issues.push("申請人");
+    if (!String(shipmentForm.product_name || "").trim()) issues.push("產品");
+    if (!String(shipmentForm.quantity || "").trim()) issues.push("數量");
+    return issues;
+  };
+
+  const shipmentIssues = getShipmentFormIssues();
+  const shipmentSuggestions = [];
+  if (!String(shipmentForm.spec || "").trim()) shipmentSuggestions.push("規格");
+  if (!String(shipmentForm.unit || "").trim()) shipmentSuggestions.push("單位");
+  if (!String(shipmentForm.batch_display || "").trim()) shipmentSuggestions.push("訂單編號 / 批號顯示");
+  const shipmentLots = selectedOrder && Array.isArray(selectedOrder.lots) ? selectedOrder.lots : [];
+  const selectedLotCount = selectedLots.length;
+  const shipmentSummaryCardStyle = {
+    background: "rgba(15,23,42,0.72)",
+    border: "1px solid rgba(167,139,250,0.18)",
+    borderRadius: 14,
+    boxShadow: "0 16px 36px rgba(15,23,42,0.16)",
+    padding: 14,
+  };
+  const selectedEngineTemplate = engineCatalog.find(item => item.code === engineTemplateCode) || null;
 
   return (
     <div>
@@ -2236,16 +2642,17 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
         }
       >
         <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
-          <StatCard label="生產記錄" value={prodRecords.length} color="#38bdf8" sub={prodLowYield > 0 ? prodLowYield + " 批低良率" : "良率正常"} />
-          <StatCard label="進料檢驗" value={qualityRecords.length} color="#22c55e" sub={qualityNg > 0 ? qualityNg + " 批異常" : "全部合格"} />
-          <StatCard label="環境監測" value={envRecords.length} color="#14b8a6" sub={envWarning > 0 ? envWarning + " 筆警示" : "無警示"} />
+          <StatCard label="生產記錄" value={safeProdRecords.length} color="#38bdf8" sub={prodLowYield > 0 ? prodLowYield + " 批低良率" : "良率正常"} />
+          <StatCard label="進料檢驗" value={safeQualityRecords.length} color="#22c55e" sub={qualityNg > 0 ? qualityNg + " 批異常" : "全部合格"} />
+          <StatCard label="環境監測" value={safeEnvRecords.length} color="#14b8a6" sub={envWarning > 0 ? envWarning + " 筆警示" : "無警示"} />
         </div>
         {message && <div style={{ marginTop:14, fontSize:12, color:"#bae6fd" }}>{message}</div>}
       </PageIntro>
 
+      <div ref={prodSectionRef}>
       <Panel
         title="生產批次"
-        description="優先維護正式生產日報資料。讀取既有記錄後可直接修正欄位，再匯出成正式 Excel。"
+        description="先用日期、站點與關鍵字縮小範圍，再查看每日生產批次。你可以讀取既有生產日報、匯入新檔案，或直接編修後匯出生產記錄。"
         accent="#38bdf8"
         actions={
           <>
@@ -2256,33 +2663,116 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
         }
         style={{ marginBottom: 20 }}
       >
-        <div style={tableShellStyle}>
-          <table style={{ width:"100%", borderCollapse:"collapse", minWidth:980 }}>
-            <thead><tr>{["批號","客戶","產品","投入數","良品數","不良數","良率 %","不良原因","作業員","備註",""].map(head => <th key={head} style={tableHeadCellStyle}>{head}</th>)}</tr></thead>
-            <tbody>
-              {prodRecords.map((row, index) => (
-                <tr key={row.lot + "-" + index}>
-                  <td style={tableRowCellStyle}><input value={row.lot} onChange={e => updateProdRecord(index, "lot", e.target.value)} style={inputStyle} /></td>
-                  <td style={tableRowCellStyle}><input value={row.customer} onChange={e => updateProdRecord(index, "customer", e.target.value)} style={inputStyle} /></td>
-                  <td style={tableRowCellStyle}><input value={row.product} onChange={e => updateProdRecord(index, "product", e.target.value)} style={inputStyle} /></td>
-                  <td style={tableRowCellStyle}><input type="number" value={row.input} onChange={e => updateProdRecord(index, "input", e.target.value)} style={inputStyle} /></td>
-                  <td style={tableRowCellStyle}><input type="number" value={row.good} onChange={e => updateProdRecord(index, "good", e.target.value)} style={inputStyle} /></td>
-                  <td style={tableRowCellStyle}><input type="number" value={row.defect} onChange={e => updateProdRecord(index, "defect", e.target.value)} style={inputStyle} /></td>
-                  <td style={{ ...tableRowCellStyle, color:Number(row.yieldRate) < 95 ? "#fca5a5" : "#86efac", fontWeight:700 }}>{row.yieldRate === "" ? "--" : row.yieldRate}</td>
-                  <td style={tableRowCellStyle}><input value={Array.isArray(row.defectReasons) ? row.defectReasons.join(", ") : row.defectReasons} onChange={e => updateProdRecord(index, "defectReasons", e.target.value.split(/[;,]/).map(item => item.trim()).filter(Boolean))} style={inputStyle} /></td>
-                  <td style={tableRowCellStyle}><input value={row.operator} onChange={e => updateProdRecord(index, "operator", e.target.value)} style={inputStyle} /></td>
-                  <td style={tableRowCellStyle}><input value={row.note} onChange={e => updateProdRecord(index, "note", e.target.value)} style={inputStyle} /></td>
-                  <td style={tableRowCellStyle}><button onClick={() => setProdRecords(prev => prev.filter((_, i) => i !== index))} style={buttonStyle("danger")}>刪除</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4, minmax(180px, 1fr))", gap:12, marginBottom:14 }}>
+          <div>
+            <div style={{ fontSize:12, color:"#94a3b8", marginBottom:6 }}>開始日期</div>
+            <input type="date" value={prodStartDate} onChange={e => setProdStartDate(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize:12, color:"#94a3b8", marginBottom:6 }}>結束日期</div>
+            <input type="date" value={prodEndDate} onChange={e => setProdEndDate(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize:12, color:"#94a3b8", marginBottom:6 }}>站點</div>
+            <select value={prodSiteFilter} onChange={e => setProdSiteFilter(e.target.value)} style={inputStyle}>
+              <option value="ALL">全部站點</option>
+              {prodSiteOptions.map(site => <option key={site} value={site}>{site}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize:12, color:"#94a3b8", marginBottom:6 }}>關鍵字</div>
+            <input value={prodSearch} onChange={e => setProdSearch(e.target.value)} placeholder="可搜尋批號、客戶、產品、站點或作業員" style={inputStyle} />
+          </div>
+        </div>
+
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:14 }}>
+          <button onClick={() => setProdPresetRange("latest")} style={buttonStyle("secondary")}>最新一天</button>
+          <button onClick={() => setProdPresetRange("7d")} style={buttonStyle("secondary")}>最近 7 天</button>
+          <button onClick={() => setProdPresetRange("30d")} style={buttonStyle("secondary")}>最近 30 天</button>
+          <button onClick={() => setProdPresetRange("all")} style={buttonStyle("secondary")}>清除日期</button>
+          <button onClick={() => toggleAllProdGroups(true)} style={buttonStyle("secondary")}>全部展開</button>
+          <button onClick={() => toggleAllProdGroups(false)} style={buttonStyle("secondary")}>全部收合</button>
+        </div>
+
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:16 }}>
+          <Badge color="#38bdf8">{filteredProdRows.length} 筆可視資料</Badge>
+          <Badge color="#22c55e">{prodGroupList.length} 個日期 / 站點群組</Badge>
+          <Badge color={filteredProdRows.filter(item => getProdRowIssues(item.row).length > 0).length > 0 ? "#f59e0b" : "#22c55e"}>
+            {filteredProdRows.filter(item => getProdRowIssues(item.row).length > 0).length} 筆待補欄位
+          </Badge>
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          {prodGroupList.length === 0 && (
+            <div style={{ ...tableShellStyle, padding:18, color:"#94a3b8", fontSize:13 }}>
+              目前沒有符合篩選條件的生產資料。你可以先調整日期、站點或關鍵字，或先讀取既有生產日報。
+            </div>
+          )}
+
+          {prodGroupList.map(group => (
+            <div key={group.key} style={{ ...tableShellStyle, overflow:"hidden" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:12, flexWrap:"wrap", alignItems:"center", padding:"14px 16px", borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+                <div>
+                  <div style={{ fontSize:18, fontWeight:800, color:"#e2e8f0" }}>{group.date} / {group.site}</div>
+                  <div style={{ fontSize:12, color:"#94a3b8", marginTop:4 }}>
+                    {group.items.length} 筆，投入 {group.totalInput}，良品 {group.totalGood}，不良 {group.totalDefect}
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+                  {group.issueCount > 0 && <Badge color="#f59e0b">{group.issueCount} 筆待補欄位</Badge>}
+                  <Badge color={group.avgYield < 95 ? "#f59e0b" : "#22c55e"}>平均良率 {group.avgYield}%</Badge>
+                  <button onClick={() => toggleProdGroup(group.key)} style={buttonStyle("secondary")}>
+                    {(expandedProdGroups[group.key] ?? true) ? "收合明細" : "展開明細"}
+                  </button>
+                </div>
+              </div>
+
+              {(expandedProdGroups[group.key] ?? true) && (
+                <div style={{ overflowX:"auto" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", minWidth:980 }}>
+                    <thead><tr>{["批號","客戶","產品","投入數","良品數","不良數","良率 %","不良原因","作業員","備註",""].map(head => <th key={head} style={tableHeadCellStyle}>{head}</th>)}</tr></thead>
+                    <tbody>
+                      {group.items.map(({ row, index }) => {
+                        const issues = getProdRowIssues(row);
+                        const issueSet = new Set(issues);
+                        const flaggedStyle = (label) => issueSet.has(label)
+                          ? { ...inputStyle, borderColor:"rgba(245,158,11,0.55)", background:"rgba(245,158,11,0.08)" }
+                          : inputStyle;
+                        return (
+                          <tr key={(row.lot || "LOT") + "-" + index}>
+                            <td style={tableRowCellStyle}><input value={row.lot} onChange={e => updateProdRecord(index, "lot", e.target.value)} style={flaggedStyle("批號")} /></td>
+                            <td style={tableRowCellStyle}><input value={row.customer} onChange={e => updateProdRecord(index, "customer", e.target.value)} style={flaggedStyle("客戶")} /></td>
+                            <td style={tableRowCellStyle}><input value={row.product} onChange={e => updateProdRecord(index, "product", e.target.value)} style={flaggedStyle("產品")} /></td>
+                            <td style={tableRowCellStyle}><input type="number" value={row.input} onChange={e => updateProdRecord(index, "input", e.target.value)} style={flaggedStyle("投入數")} /></td>
+                            <td style={tableRowCellStyle}><input type="number" value={row.good} onChange={e => updateProdRecord(index, "good", e.target.value)} style={inputStyle} /></td>
+                            <td style={tableRowCellStyle}><input type="number" value={row.defect} onChange={e => updateProdRecord(index, "defect", e.target.value)} style={inputStyle} /></td>
+                            <td style={{ ...tableRowCellStyle, color:Number(row.yieldRate) < 95 ? "#fca5a5" : "#86efac", fontWeight:700 }}>{row.yieldRate === "" ? "--" : row.yieldRate}</td>
+                            <td style={tableRowCellStyle}><input value={Array.isArray(row.defectReasons) ? row.defectReasons.join(", ") : row.defectReasons} onChange={e => updateProdRecord(index, "defectReasons", e.target.value.split(/[;,]/).map(item => item.trim()).filter(Boolean))} style={inputStyle} /></td>
+                            <td style={tableRowCellStyle}><input value={row.operator} onChange={e => updateProdRecord(index, "operator", e.target.value)} style={flaggedStyle("作業員")} /></td>
+                            <td style={tableRowCellStyle}><input value={row.note} onChange={e => updateProdRecord(index, "note", e.target.value)} style={inputStyle} /></td>
+                            <td style={tableRowCellStyle}>
+                              <div style={{ display:"flex", flexDirection:"column", gap:6, alignItems:"flex-start" }}>
+                                <button onClick={() => setProdRecords(prev => prev.filter((_, i) => i !== index))} style={buttonStyle("danger")}>刪除</button>
+                                {issues.length > 0 && <span style={{ fontSize:11, color:"#fcd34d" }}>待補：{issues.join(" / ")}</span>}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </Panel>
+      </div>
 
+      <div ref={qualitySectionRef}>
       <Panel
         title="進料檢驗"
-        description="集中維護原料與檢驗紀錄，方便快速查核、修正與匯出。"
+        description="先用關鍵字與結果縮小範圍，再查看每一種材料的檢驗結果。你可以讀取既有品質記錄、匯入新檔案，或直接補值後匯出。"
         accent="#22c55e"
         actions={
           <>
@@ -2293,31 +2783,141 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
         }
         style={{ marginBottom: 20 }}
       >
-        <div style={tableShellStyle}>
-          <table style={{ width:"100%", borderCollapse:"collapse", minWidth:1080 }}>
-            <thead><tr>{["材料名稱","批號","數量","規格","檢驗數量","PH","比重","RI","旋光值","結果","備註",""].map(head => <th key={head} style={tableHeadCellStyle}>{head}</th>)}</tr></thead>
-            <tbody>
-              {qualityRecords.map((row, index) => (
-                <tr key={row.batchNo + "-" + index}>
-                  {["materialName","batchNo","quantity","spec","inspQty","ph","density","ri","rotation","result","note"].map(field => (
-                    <td key={field} style={tableRowCellStyle}>
-                      <input value={row[field]} onChange={e => updateQualityRecord(index, field, e.target.value)} style={inputStyle} />
-                    </td>
-                  ))}
-                  <td style={tableRowCellStyle}><button onClick={() => setQualityRecords(prev => prev.filter((_, i) => i !== index))} style={buttonStyle("danger")}>刪除</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ display:"grid", gridTemplateColumns:"minmax(240px, 2fr) minmax(180px, 1fr)", gap:12, marginBottom:14 }}>
+          <div>
+            <div style={{ fontSize:12, color:"#94a3b8", marginBottom:6 }}>關鍵字</div>
+            <input value={qualitySearch} onChange={e => setQualitySearch(e.target.value)} placeholder="可搜尋材料名稱、批號、規格或結果" style={inputStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize:12, color:"#94a3b8", marginBottom:6 }}>結果</div>
+            <select value={qualityResultFilter} onChange={e => setQualityResultFilter(e.target.value)} style={inputStyle}>
+              <option value="ALL">全部結果</option>
+              <option value="PASS">PASS</option>
+              <option value="NG">NG</option>
+              <option value="FAIL">FAIL</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:14 }}>
+          <button onClick={() => setQualitySearch("")} style={buttonStyle("secondary")}>清除關鍵字</button>
+          <button onClick={() => setQualityResultFilter("ALL")} style={buttonStyle("secondary")}>全部結果</button>
+          <button onClick={() => toggleAllQualityGroups(true)} style={buttonStyle("secondary")}>全部展開</button>
+          <button onClick={() => toggleAllQualityGroups(false)} style={buttonStyle("secondary")}>全部收合</button>
+        </div>
+
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:16 }}>
+          <Badge color="#22c55e">{filteredQualityRows.length} 筆檢驗資料</Badge>
+          <Badge color="#38bdf8">{qualityGroupList.length} 個材料群組</Badge>
+          <Badge color={filteredQualityNg > 0 ? "#ef4444" : "#22c55e"}>{filteredQualityNg} 筆異常</Badge>
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          {qualityGroupList.length === 0 && (
+            <div style={{ ...tableShellStyle, padding:18, color:"#94a3b8", fontSize:13 }}>
+              目前沒有符合篩選條件的品質檢驗資料。你可以先調整關鍵字與結果，或先讀取既有品質記錄。
+            </div>
+          )}
+
+          {qualityGroupList.map(group => (
+            <div key={group.key} style={{ ...tableShellStyle, overflow:"hidden" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:12, flexWrap:"wrap", alignItems:"center", padding:"14px 16px", borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+                <div>
+                  <div style={{ fontSize:18, fontWeight:800, color:"#e2e8f0" }}>{group.materialName}</div>
+                  <div style={{ fontSize:12, color:"#94a3b8", marginTop:4 }}>
+                    {group.items.length} 筆，其中異常 {group.ngCount} 筆
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+                  {group.issueCount > 0 && <Badge color="#f59e0b">{group.issueCount} 筆待補欄位</Badge>}
+                  <Badge color={group.ngCount > 0 ? "#ef4444" : "#22c55e"}>{group.ngCount > 0 ? "有異常" : "目前正常"}</Badge>
+                  <button onClick={() => toggleQualityGroup(group.key)} style={buttonStyle("secondary")}>
+                    {(expandedQualityGroups[group.key] ?? true) ? "收合明細" : "展開明細"}
+                  </button>
+                </div>
+              </div>
+
+              {(expandedQualityGroups[group.key] ?? true) && (
+                <div style={{ overflowX:"auto" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", minWidth:1080 }}>
+                    <thead><tr>{["材料名稱","批號","數量","規格","檢驗數量","PH","比重","RI","旋光值","結果","備註",""].map(head => <th key={head} style={tableHeadCellStyle}>{head}</th>)}</tr></thead>
+                    <tbody>
+                      {group.items.map(({ row, index }) => {
+                        const issues = getQualityRowIssues(row);
+                        const issueSet = new Set(issues);
+                        const flaggedStyle = (label) => issueSet.has(label)
+                          ? { ...inputStyle, borderColor:"rgba(245,158,11,0.55)", background:"rgba(245,158,11,0.08)" }
+                          : inputStyle;
+                        return (
+                          <tr key={(row.batchNo || row.materialName || "QUALITY") + "-" + index}>
+                            <td style={tableRowCellStyle}><input value={row.materialName} onChange={e => updateQualityRecord(index, "materialName", e.target.value)} style={flaggedStyle("材料名稱")} /></td>
+                            <td style={tableRowCellStyle}><input value={row.batchNo} onChange={e => updateQualityRecord(index, "batchNo", e.target.value)} style={flaggedStyle("批號")} /></td>
+                            <td style={tableRowCellStyle}><input value={row.quantity} onChange={e => updateQualityRecord(index, "quantity", e.target.value)} style={inputStyle} /></td>
+                            <td style={tableRowCellStyle}><input value={row.spec} onChange={e => updateQualityRecord(index, "spec", e.target.value)} style={flaggedStyle("規格")} /></td>
+                            <td style={tableRowCellStyle}><input value={row.inspQty} onChange={e => updateQualityRecord(index, "inspQty", e.target.value)} style={inputStyle} /></td>
+                            <td style={tableRowCellStyle}><input value={row.ph} onChange={e => updateQualityRecord(index, "ph", e.target.value)} style={inputStyle} /></td>
+                            <td style={tableRowCellStyle}><input value={row.density} onChange={e => updateQualityRecord(index, "density", e.target.value)} style={inputStyle} /></td>
+                            <td style={tableRowCellStyle}><input value={row.ri} onChange={e => updateQualityRecord(index, "ri", e.target.value)} style={inputStyle} /></td>
+                            <td style={tableRowCellStyle}><input value={row.rotation} onChange={e => updateQualityRecord(index, "rotation", e.target.value)} style={inputStyle} /></td>
+                            <td style={tableRowCellStyle}><input value={row.result} onChange={e => updateQualityRecord(index, "result", e.target.value)} style={flaggedStyle("結果")} /></td>
+                            <td style={tableRowCellStyle}><input value={row.note} onChange={e => updateQualityRecord(index, "note", e.target.value)} style={inputStyle} /></td>
+                            <td style={tableRowCellStyle}>
+                              <div style={{ display:"flex", flexDirection:"column", gap:6, alignItems:"flex-start" }}>
+                                <button onClick={() => setQualityRecords(prev => prev.filter((_, i) => i !== index))} style={buttonStyle("danger")}>刪除</button>
+                                {issues.length > 0 && <span style={{ fontSize:11, color:"#fcd34d" }}>待補：{issues.join(" / ")}</span>}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </Panel>
+      </div>
 
+      <div ref={shipmentSectionRef}>
       <Panel
         title="出貨單草稿產生"
         description="依現有訂單與 LOT 資料產出 14.3 出貨單草稿。這一區適合先整理資料，再送出正式紀錄。"
         accent="#a78bfa"
         actions={<Badge color="#a78bfa">{shipmentLoading ? "載入中" : shipmentOrders.length + " 筆訂單"}</Badge>}
       >
+
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:14 }}>
+          <Badge color="#a78bfa">{shipmentOrderNo ? "已選訂單" : "尚未選訂單"}</Badge>
+          <Badge color="#38bdf8">{shipmentLots.length} 個可選 LOT</Badge>
+          <Badge color="#14b8a6">{selectedLotCount} 個已勾選 LOT</Badge>
+          <Badge color={shipmentIssues.length ? "#f97316" : "#22c55e"}>{shipmentIssues.length ? shipmentIssues.length + " 項必填待補" : "必填欄位完整"}</Badge>
+        </div>
+
+        {selectedOrder && (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))", gap:12, marginBottom:14 }}>
+            <div style={shipmentSummaryCardStyle}>
+              <div style={{ fontSize:11, letterSpacing:1.1, color:"#c4b5fd", marginBottom:6 }}>目前訂單</div>
+              <div style={{ fontSize:16, fontWeight:700, color:"#f5f3ff" }}>{selectedOrder.order_no}</div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginTop:4 }}>{selectedOrder.product_name_suggested || selectedOrder.source_product || "未命名產品"}</div>
+            </div>
+            <div style={shipmentSummaryCardStyle}>
+              <div style={{ fontSize:11, letterSpacing:1.1, color:"#c4b5fd", marginBottom:6 }}>建議出貨</div>
+              <div style={{ fontSize:16, fontWeight:700, color:"#f5f3ff" }}>{selectedOrder.ship_date_suggested || "未提供"}</div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginTop:4 }}>數量 {selectedOrder.quantity_suggested || "未提供"} {selectedOrder.unit_suggested || ""}</div>
+            </div>
+            <div style={shipmentSummaryCardStyle}>
+              <div style={{ fontSize:11, letterSpacing:1.1, color:"#c4b5fd", marginBottom:6 }}>欄位提醒</div>
+              <div style={{ fontSize:13, color:shipmentIssues.length ? "#fdba74" : "#86efac", fontWeight:600 }}>
+                {shipmentIssues.length ? "待補：" + shipmentIssues.join(" / ") : "必填欄位已完成"}
+              </div>
+              {shipmentSuggestions.length > 0 && (
+                <div style={{ fontSize:12, color:"#cbd5e1", marginTop:6 }}>建議補上：{shipmentSuggestions.join(" / ")}</div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))", gap:12 }}>
           <div>
@@ -2327,18 +2927,18 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
               {shipmentOrders.map(item => <option key={item.order_no} value={item.order_no}>{item.order_no} - {item.product_name_suggested || item.source_product || "未命名"}</option>)}
             </select>
           </div>
-          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>日期</div><input type="date" value={shipmentForm.date} onChange={e => setShipmentForm(prev => ({ ...prev, date:e.target.value }))} style={inputStyle} /></div>
-          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>部門</div><input value={shipmentForm.department} onChange={e => setShipmentForm(prev => ({ ...prev, department:e.target.value }))} style={inputStyle} /></div>
-          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>申請人</div><input value={shipmentForm.requester} onChange={e => setShipmentForm(prev => ({ ...prev, requester:e.target.value }))} style={inputStyle} /></div>
-          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>產品</div><input value={shipmentForm.product_name} onChange={e => setShipmentForm(prev => ({ ...prev, product_name:e.target.value }))} style={inputStyle} /></div>
-          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>規格</div><input value={shipmentForm.spec} onChange={e => setShipmentForm(prev => ({ ...prev, spec:e.target.value }))} style={inputStyle} /></div>
-          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>數量</div><input value={shipmentForm.quantity} onChange={e => setShipmentForm(prev => ({ ...prev, quantity:e.target.value }))} style={inputStyle} /></div>
-          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>單位</div><input value={shipmentForm.unit} onChange={e => setShipmentForm(prev => ({ ...prev, unit:e.target.value }))} style={inputStyle} /></div>
+          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>日期</div><input ref={shipmentFieldRefs.date} type="date" value={shipmentForm.date} onChange={e => setShipmentForm(prev => ({ ...prev, date:e.target.value }))} style={{ ...inputStyle, borderColor: shipmentIssues.includes("日期") ? "rgba(249,115,22,0.8)" : inputStyle.borderColor }} /></div>
+          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>部門</div><input ref={shipmentFieldRefs.department} value={shipmentForm.department} onChange={e => setShipmentForm(prev => ({ ...prev, department:e.target.value }))} style={{ ...inputStyle, borderColor: shipmentIssues.includes("部門") ? "rgba(249,115,22,0.8)" : inputStyle.borderColor }} /></div>
+          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>申請人</div><input ref={shipmentFieldRefs.requester} value={shipmentForm.requester} onChange={e => setShipmentForm(prev => ({ ...prev, requester:e.target.value }))} style={{ ...inputStyle, borderColor: shipmentIssues.includes("申請人") ? "rgba(249,115,22,0.8)" : inputStyle.borderColor }} /></div>
+          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>產品</div><input ref={shipmentFieldRefs.product_name} value={shipmentForm.product_name} onChange={e => setShipmentForm(prev => ({ ...prev, product_name:e.target.value }))} style={{ ...inputStyle, borderColor: shipmentIssues.includes("產品") ? "rgba(249,115,22,0.8)" : inputStyle.borderColor }} /></div>
+          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>規格</div><input ref={shipmentFieldRefs.spec} value={shipmentForm.spec} onChange={e => setShipmentForm(prev => ({ ...prev, spec:e.target.value }))} style={{ ...inputStyle, borderColor: shipmentSuggestions.includes("規格") ? "rgba(56,189,248,0.45)" : inputStyle.borderColor }} /></div>
+          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>數量</div><input ref={shipmentFieldRefs.quantity} value={shipmentForm.quantity} onChange={e => setShipmentForm(prev => ({ ...prev, quantity:e.target.value }))} style={{ ...inputStyle, borderColor: shipmentIssues.includes("數量") ? "rgba(249,115,22,0.8)" : inputStyle.borderColor }} /></div>
+          <div><div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>單位</div><input ref={shipmentFieldRefs.unit} value={shipmentForm.unit} onChange={e => setShipmentForm(prev => ({ ...prev, unit:e.target.value }))} style={{ ...inputStyle, borderColor: shipmentSuggestions.includes("單位") ? "rgba(56,189,248,0.45)" : inputStyle.borderColor }} /></div>
         </div>
 
         <div style={{ marginTop:12 }}>
           <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>訂單編號 / 批號顯示</div>
-          <input value={shipmentForm.batch_display} onChange={e => setShipmentForm(prev => ({ ...prev, batch_display:e.target.value }))} style={inputStyle} />
+          <input ref={shipmentFieldRefs.batch_display} value={shipmentForm.batch_display} onChange={e => setShipmentForm(prev => ({ ...prev, batch_display:e.target.value }))} style={{ ...inputStyle, borderColor: shipmentSuggestions.includes("訂單編號 / 批號顯示") ? "rgba(56,189,248,0.45)" : inputStyle.borderColor }} />
         </div>
 
         {selectedOrder && selectedOrder.lots && selectedOrder.lots.length > 0 && (
@@ -2377,6 +2977,13 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
         style={{ marginTop: 20 }}
       >
 
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:14 }}>
+          <Badge color="#f97316">1. 輸入需求</Badge>
+          <Badge color="#fb923c">2. 選模板</Badge>
+          <Badge color="#38bdf8">3. 先檢查缺欄</Badge>
+          <Badge color="#22c55e">4. 產生草稿</Badge>
+        </div>
+
         <div style={{ display:"grid", gridTemplateColumns:"1.3fr 1fr", gap:12, alignItems:"end" }}>
           <div>
             <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>需求提示</div>
@@ -2389,6 +2996,21 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
             </select>
           </div>
         </div>
+
+        {selectedEngineTemplate && (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))", gap:12, marginTop:14 }}>
+            <div style={{ ...shipmentSummaryCardStyle, borderColor:"rgba(249,115,22,0.18)" }}>
+              <div style={{ fontSize:11, letterSpacing:1.1, color:"#fdba74", marginBottom:6 }}>目前模板</div>
+              <div style={{ fontSize:16, fontWeight:700, color:"#fff7ed" }}>{selectedEngineTemplate.title}</div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginTop:4 }}>{selectedEngineTemplate.description}</div>
+            </div>
+            <div style={{ ...shipmentSummaryCardStyle, borderColor:"rgba(56,189,248,0.18)" }}>
+              <div style={{ fontSize:11, letterSpacing:1.1, color:"#7dd3fc", marginBottom:6 }}>輸出型態</div>
+              <div style={{ fontSize:16, fontWeight:700, color:"#e0f2fe" }}>{selectedEngineTemplate.bundle ? "流程包 / ZIP" : "單一表單 / XLSX"}</div>
+              <div style={{ fontSize:12, color:"#cbd5e1", marginTop:4 }}>{selectedEngineTemplate.bundle ? "會一次產出多份下游紀錄" : "只產生目前選擇的模板"}</div>
+            </div>
+          </div>
+        )}
 
         {engineSuggestions.length > 0 && (
           <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:12 }}>
@@ -2404,17 +3026,99 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
           <div style={{ marginTop:12 }}>
             <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>不符合來源</div>
             <select value={selectedNcId} onChange={e => setSelectedNcId(e.target.value)} style={inputStyle}>
-              {(nonConformances || []).map(item => <option key={item.id} value={item.id}>{item.id} - {item.description}</option>)}
+              {safeNonConformances.map(item => <option key={item.id} value={item.id}>{item.id} - {item.description}</option>)}
             </select>
+          </div>
+        )}
+
+        {(engineTemplateCode === "audit_notice" || engineTemplateCode === "audit_pack") && (
+          <div style={{ marginTop:12 }}>
+            <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>選擇稽核計畫</div>
+            {safeAuditPlans.length === 0
+              ? <div style={{ fontSize:12, color:"#ef4444" }}>⚠ 尚無稽核計畫資料，請先至「稽核計畫」頁新增。</div>
+              : <select value={selectedAuditId} onChange={e => setSelectedAuditId(e.target.value)} style={inputStyle}>
+                  {safeAuditPlans.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.id}｜{item.year} {item.period}｜{item.dept}｜{item.auditor} → {item.auditee}
+                    </option>
+                  ))}
+                </select>
+            }
           </div>
         )}
 
         <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap", marginTop:16 }}>
           <button onClick={suggestRecordTemplates} disabled={engineBusy} style={{ background:"linear-gradient(135deg,#b45309,#f97316)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity:engineBusy ? 0.6 : 1 }}>{engineBusy ? "分析中..." : "分析建議模板"}</button>
+          <button onClick={precheckRecordTemplate} disabled={engineBusy || enginePrecheckBusy || !engineTemplateCode} style={{ background:"linear-gradient(135deg,#0369a1,#0ea5e9)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity:(engineBusy || enginePrecheckBusy || !engineTemplateCode) ? 0.6 : 1 }}>{enginePrecheckBusy ? "檢查中..." : "先檢查缺欄"}</button>
           <button onClick={generateEngineRecord} disabled={engineBusy || !engineTemplateCode} style={{ background:"linear-gradient(135deg,#c2410c,#ea580c)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"10px 16px", fontSize:13, fontWeight:700, opacity:(engineBusy || !engineTemplateCode) ? 0.6 : 1 }}>{engineBusy ? "產生中..." : "產生紀錄草稿"}</button>
           {engineMessage && <div style={{ fontSize:12, color:"#ffedd5" }}>{engineMessage}</div>}
         </div>
+
+        {enginePrecheck && (
+          <div style={{ marginTop:16, padding:16, borderRadius:14, background:"rgba(15,23,42,0.72)", border:"1px solid rgba(249,115,22,0.16)" }}>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", marginBottom:12 }}>
+              <Badge color={enginePrecheck.ready ? "#22c55e" : "#f97316"}>{enginePrecheck.ready ? "可直接產生" : "需先補欄"}</Badge>
+              <Badge color="#38bdf8">{(enginePrecheck.missing_items || []).length} 項必填缺口</Badge>
+              <Badge color="#f59e0b">{(enginePrecheck.warnings || []).length} 項提醒</Badge>
+            </div>
+
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))", gap:12 }}>
+              <div>
+                <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>來源資料</div>
+                <div style={{ fontSize:13, color:"#e2e8f0", lineHeight:1.8 }}>
+                  環境：{enginePrecheck.source_counts?.env_records || 0} 筆<br />
+                  生產：{enginePrecheck.source_counts?.prod_records || 0} 筆<br />
+                  品質：{enginePrecheck.source_counts?.quality_records || 0} 筆<br />
+                  出貨：{enginePrecheck.source_counts?.shipment || 0} 組<br />
+                  不符合：{enginePrecheck.source_counts?.nonconformance || 0} 筆
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>缺少欄位</div>
+                {(enginePrecheck.missing_details || []).length ? (
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    {enginePrecheck.missing_details.map((detail, index) => (
+                      <button
+                        key={(detail.scope || "scope") + "-" + (detail.field_key || "field") + "-" + index}
+                        onClick={() => jumpToMissingDetail(detail)}
+                        style={{ background:"rgba(249,115,22,0.12)", border:"1px solid rgba(249,115,22,0.24)", borderRadius:999, color:"#ffedd5", cursor:"pointer", padding:"6px 10px", fontSize:12 }}
+                      >
+                        {detail.scope_label ? detail.scope_label + "：" : ""}{detail.label || detail.field_key}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize:13, color:"#86efac", lineHeight:1.8 }}>目前沒有必填缺口</div>
+                )}
+              </div>
+              <div>
+                <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>下游模板</div>
+                <div style={{ fontSize:13, color:"#e2e8f0", lineHeight:1.8 }}>
+                  {enginePrecheck.bundle && (enginePrecheck.included_templates || []).length
+                    ? enginePrecheck.included_templates.map(item => item.title).join(" / ")
+                    : (enginePrecheck.downstream_templates || []).length
+                      ? enginePrecheck.downstream_templates.map(item => item.title).join(" / ")
+                      : "無額外下游模板"}
+                </div>
+              </div>
+            </div>
+
+            {(enginePrecheck.warnings || []).length > 0 && (
+              <div style={{ marginTop:12 }}>
+                <div style={{ fontSize:12, color:"#cbd5e1", marginBottom:6 }}>提醒</div>
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                  {enginePrecheck.warnings.map((item, index) => (
+                    <span key={index} style={{ fontSize:12, color:"#ffedd5", background:"rgba(249,115,22,0.12)", border:"1px solid rgba(249,115,22,0.18)", borderRadius:999, padding:"6px 10px" }}>
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </Panel>
+      </div>
     </div>
   );
 }
@@ -4169,6 +4873,7 @@ function App() {
   const [equipment, setEquipment] = useState(initialEquipment);
   const [suppliers, setSuppliers] = useState(initialSuppliers);
   const [nonConformances, setNonConformances] = useState(initialNonConformances);
+  const [highlightNcId, setHighlightNcId] = useState(null);
   const [auditPlans, setAuditPlans] = useState(initialAuditPlans);
   const [envRecords, setEnvRecords] = useState(initialEnvRecords);
   const [prodRecords, setProdRecords] = useState(() => loadStoredState("audit_prodrecords", initialProdRecords));
@@ -4225,10 +4930,10 @@ function App() {
       case "training":       return <TrainingTab training={training} setTraining={setTraining} />;
       case "equipment":      return <EquipmentTab equipment={equipment} setEquipment={setEquipment} />;
       case "supplier":       return <SupplierTab suppliers={suppliers} setSuppliers={setSuppliers} />;
-      case "nonconformance": return <NonConformanceTab nonConformances={nonConformances} setNonConformances={setNonConformances} />;
+      case "nonconformance": return <NonConformanceTab nonConformances={nonConformances} setNonConformances={setNonConformances} highlightNcId={highlightNcId} onHighlightDone={() => setHighlightNcId(null)} />;
       case "auditplan":      return <AuditPlanTab auditPlans={auditPlans} setAuditPlans={setAuditPlans} />;
       case "environment":    return <EnvironmentTab envRecords={envRecords} setEnvRecords={setEnvRecords} />;
-    case "production":     return <ProductionTab envRecords={envRecords} prodRecords={prodRecords} setProdRecords={setProdRecords} qualityRecords={qualityRecords} setQualityRecords={setQualityRecords} nonConformances={nonConformances} />;
+    case "production":     return <PageErrorBoundary pageName="????" storageKeys={["audit_prodrecords", "audit_qualityrecords"]}><ProductionTab envRecords={envRecords} prodRecords={prodRecords} setProdRecords={setProdRecords} qualityRecords={qualityRecords} setQualityRecords={setQualityRecords} nonConformances={nonConformances} auditPlans={auditPlans} setActiveTab={setActiveTab} setHighlightNcId={setHighlightNcId} /></PageErrorBoundary>;
       case "notification":   return <NotificationTab instruments={instruments} documents={documents} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} />;
       case "aiworkbench":    return <AIWorkbenchTab documents={documents} manuals={manuals} nonConformances={nonConformances} />;
       case "report":         return <ReportTab instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} />;
@@ -4273,6 +4978,9 @@ function App() {
     </div>
   );
 }
+
+
+
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
