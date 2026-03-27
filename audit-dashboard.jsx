@@ -1386,7 +1386,7 @@ function SupplierTab({ suppliers, setSuppliers }) {
 }
 
 // ─── NON-CONFORMANCE TAB (MP-15) ─────────────────────────────────────────────
-function NonConformanceTab({ nonConformances: items, setNonConformances: setItems, highlightNcId, onHighlightDone }) {
+function NonConformanceTab({ nonConformances: items, setNonConformances: setItems, highlightNcId, onHighlightDone, expandNcId, onExpandDone }) {
   const emptyDraft = { id:"", date:"", dept:"", type:"製程異常", description:"", severity:"輕微", rootCause:"", correctiveAction:"", responsible:"", dueDate:"", status:"待處理", closeDate:"", effectiveness:"" };
   const [modal, setModal] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -1413,6 +1413,15 @@ function NonConformanceTab({ nonConformances: items, setNonConformances: setItem
       return () => clearTimeout(t);
     }
   }, [highlightNcId]);
+
+  useEffect(() => {
+    if (!expandNcId) return;
+    const nc = items.find(item => String(item.id) === String(expandNcId));
+    if (nc) {
+      setModal(nc);
+      onExpandDone?.();
+    }
+  }, [expandNcId]);
 
   const statusColor = s => s==="已關閉"?"#22c55e":s==="處理中"?"#f97316":s==="待處理"?"#ef4444":"#eab308";
   const sevColor = s => s==="重大"?"#ef4444":s==="中度"?"#eab308":"#60a5fa";
@@ -1949,7 +1958,7 @@ function EnvironmentTab({ envRecords, setEnvRecords }) {
   );
 }
 
-function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords, setQualityRecords, nonConformances, auditPlans, setActiveTab, setHighlightNcId }) {
+function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords, setQualityRecords, nonConformances, auditPlans, setActiveTab, setHighlightNcId, setExpandNcId }) {
   const objectRows = (value) => Array.isArray(value) ? value.filter(item => item && typeof item === "object") : [];
   const safeEnvRecords = objectRows(envRecords);
   const safeProdRecords = objectRows(prodRecords);
@@ -2320,11 +2329,22 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
     }
     if (detail.scope === "nonconformance") {
       setActiveTab("nonconformance");
-      if (selectedNcId) setHighlightNcId(selectedNcId);
+      const targetId = detail.item_id || selectedNcId;
+      if (targetId) {
+        setHighlightNcId(targetId);
+        setExpandNcId?.(targetId);
+      }
+      setEngineMessage("已切換到不符合管理，請補齊「" + (detail.label || detail.field_key || "必要欄位") + "」。");
       return;
     }
     if (detail.scope === "environment") {
       setActiveTab("environment");
+      setEngineMessage("已切換到工作環境監控，請先上傳環境監控資料。");
+      return;
+    }
+    if (detail.scope === "audit_plans") {
+      setActiveTab("auditplan");
+      setEngineMessage("已切換到稽核計畫，請補齊「" + (detail.label || detail.field_key || "必要欄位") + "」。");
       return;
     }
   }
@@ -4846,6 +4866,7 @@ export default function App() {
   const [suppliers, setSuppliers] = useState(initialSuppliers);
   const [nonConformances, setNonConformances] = useState(initialNonConformances);
   const [highlightNcId, setHighlightNcId] = useState(null);
+  const [expandNcId, setExpandNcId] = useState(null);
   const [auditPlans, setAuditPlans] = useState(initialAuditPlans);
   const [envRecords, setEnvRecords] = useState(initialEnvRecords);
   const [prodRecords, setProdRecords] = useState(() => loadStoredState("audit_prodrecords", initialProdRecords));
@@ -4902,10 +4923,10 @@ export default function App() {
       case "training":       return <TrainingTab training={training} setTraining={setTraining} />;
       case "equipment":      return <EquipmentTab equipment={equipment} setEquipment={setEquipment} />;
       case "supplier":       return <SupplierTab suppliers={suppliers} setSuppliers={setSuppliers} />;
-      case "nonconformance": return <NonConformanceTab nonConformances={nonConformances} setNonConformances={setNonConformances} highlightNcId={highlightNcId} onHighlightDone={() => setHighlightNcId(null)} />;
+      case "nonconformance": return <NonConformanceTab nonConformances={nonConformances} setNonConformances={setNonConformances} highlightNcId={highlightNcId} onHighlightDone={() => setHighlightNcId(null)} expandNcId={expandNcId} onExpandDone={() => setExpandNcId(null)} />;
       case "auditplan":      return <AuditPlanTab auditPlans={auditPlans} setAuditPlans={setAuditPlans} />;
       case "environment":    return <EnvironmentTab envRecords={envRecords} setEnvRecords={setEnvRecords} />;
-    case "production":     return <PageErrorBoundary pageName="????" storageKeys={["audit_prodrecords", "audit_qualityrecords"]}><ProductionTab envRecords={envRecords} prodRecords={prodRecords} setProdRecords={setProdRecords} qualityRecords={qualityRecords} setQualityRecords={setQualityRecords} nonConformances={nonConformances} auditPlans={auditPlans} setActiveTab={setActiveTab} setHighlightNcId={setHighlightNcId} /></PageErrorBoundary>;
+    case "production":     return <PageErrorBoundary pageName="????" storageKeys={["audit_prodrecords", "audit_qualityrecords"]}><ProductionTab envRecords={envRecords} prodRecords={prodRecords} setProdRecords={setProdRecords} qualityRecords={qualityRecords} setQualityRecords={setQualityRecords} nonConformances={nonConformances} auditPlans={auditPlans} setActiveTab={setActiveTab} setHighlightNcId={setHighlightNcId} setExpandNcId={setExpandNcId} /></PageErrorBoundary>;
       case "notification":   return <NotificationTab instruments={instruments} documents={documents} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} />;
       case "aiworkbench":    return <AIWorkbenchTab documents={documents} manuals={manuals} nonConformances={nonConformances} />;
       case "report":         return <ReportTab instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} />;

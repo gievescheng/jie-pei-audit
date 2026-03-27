@@ -687,19 +687,25 @@ def _build_env_monthly_summary(payload: dict):
 
     # ── 異常明細工作表（僅列警告 / 不合格記錄）──────────
     anomaly_ws = wb.create_sheet("異常明細")
-    anomaly_ws.append(["日期", "點位", "地點", "0.3μm", "0.5μm", "5.0μm", "溫度", "濕度", "正壓", "記錄者", "結果"])
+    anomaly_ws.append(["日期", "點位", "地點", "0.3μm", "0.5μm", "5.0μm", "溫度", "濕度", "正壓", "記錄者", "結果", "建議追蹤"])
     anomaly_records = [
         r for r in records
         if _normalize_text(r.get("result")) in ("警告", "不合格")
     ]
     if anomaly_records:
         for r_idx, item in enumerate(anomaly_records, start=2):
+            result_val = _normalize_text(item.get("result")) or ""
+            suggestion = (
+                "請立即停止相關作業，確認設備狀況，調查超標原因並提出改善措施。"
+                if result_val == "不合格"
+                else "請加強該點位監控頻率，確認是否需要清潔或校正設備。"
+            )
             anomaly_ws.append([
                 item.get("date"), item.get("point"), item.get("location"),
                 item.get("particles03"), item.get("particles05"),
                 item.get("particles5") or item.get("particles50"),
                 item.get("temp"), item.get("humidity"), item.get("pressure"),
-                item.get("operator"), item.get("result"),
+                item.get("operator"), item.get("result"), suggestion,
             ])
             _style_row_by_result(anomaly_ws, r_idx, _normalize_text(item.get("result")) or "")
     else:
