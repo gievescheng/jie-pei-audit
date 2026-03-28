@@ -2193,6 +2193,7 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
         ...shipmentForm,
       },
       nonconformance: selectedNc,
+      all_nonconformances: safeNonConformances,
       audit_plans: safeAuditPlans,
       selected_audit_id: selectedAuditId,
     };
