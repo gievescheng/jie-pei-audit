@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+sqlalchemy
+alembic
+pydantic
+psycopg[binary]
+python-jose[cryptography]
+bcrypt
+python-multipart
+flask
+requests
+python-docx
+openpyxl
+pypdf

@@ -1,0 +1,37 @@
+# Local secrets and runtime config
+.v2_runtime.json
+.google_calendar_config.json
+.google_calendar_tokens.json
+.env
+.env.*
+*.pem
+*.key
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Local databases and runtime data
+v2_backend/data/
+erp_qms_core/backend/data/
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE / local tooling
+.vscode/
+.claude/
+
+# Office temp and OS temp files
+~$*
+*.tmp
+
+# Generated local artifacts
+_page.png
+_test_output_*.xlsx
+
+# Large local installers should not go to GitHub
+*.exe

@@ -1,0 +1,233 @@
+
+======================================================================
+// ── initialTraining ─────────────────────────────────────────────────
+// 來源：3 人力資源及訓練管理程序/記錄/3.4.X 教育訓練紀錄表(name).docx
+const initialTraining = [
+  { id: "EMP-001", name: "劉哲驊",
+    dept: "管理部", role: "協理",
+    hireDate: "2021-07-01",
+    trainings: [
+      { course: "訓 練 記 錄", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "ISO9001品質管理標準教育訓練班(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "ISO9001內部稽核員訓練(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "品質管理程序文件訓練(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+    ]},
+  { id: "EMP-002", name: "蔡有為",
+    dept: "管理部", role: "部長",
+    hireDate: "2021-07-01",
+    trainings: [
+      { course: "訓 練 記 錄", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "ISO9001品質管理標準教育訓練班(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "ISO9001內部稽核員訓練(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "品質管理程序文件訓練(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+    ]},
+  { id: "EMP-003", name: "林佑翰",
+    dept: "業務部", role: "組長",
+    hireDate: "2022-09-01",
+    trainings: [
+      { course: "訓 練 記 錄", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "ISO9001品質管理標準教育訓練班(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "ISO9001內部稽核員訓練(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "品質管理程序文件訓練(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+    ]},
+  { id: "EMP-004", name: "詹博智",
+    dept: "生產課", role: "組長",
+    hireDate: "2024-03-01",
+    trainings: [
+      { course: "訓 練 記 錄", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "ISO9001品質管理標準教育訓練班(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "ISO9001內部稽核員訓練(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "品質管理程序文件訓練(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "量測儀器校正與管理訓練", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+    ]},
+  { id: "EMP-005", name: "程鼎智",
+    dept: "品管課", role: "課長",
+    hireDate: "2021-07-01",
+    trainings: [
+      { course: "訓 練 記 錄", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "ISO9001品質管理標準教育訓練班(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "ISO9001內部稽核員訓練(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "品質管理程序文件訓練(2025)", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+    ]},
+  { id: "EMP-006", name: "林育陞",
+    dept: "", role: "",
+    hireDate: "",
+    trainings: [
+      { course: "訓 練 記 錄", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "產品相關作業操作及檢驗標準訓練", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "消防常識與火災預防", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+    ]},
+  { id: "EMP-007", name: "楊麗璇",
+    dept: "", role: "",
+    hireDate: "",
+    trainings: [
+      { course: "訓 練 記 錄", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "產品相關作業操作及檢驗標準訓練", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "消防常識與火災預防", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+    ]},
+  { id: "EMP-008", name: "朱姿霖",
+    dept: "", role: "",
+    hireDate: "",
+    trainings: [
+      { course: "訓 練 記 錄", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "產品相關作業操作及檢驗標準訓練", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+    ]},
+  { id: "EMP-009", name: "陳宥穎",
+    dept: "", role: "",
+    hireDate: "",
+    trainings: [
+      { course: "訓 練 記 錄", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+      { course: "產品相關作業操作及檢驗標準訓練", date: "",
+        type: "內訓", result: "合格", cert: "無" },
+    ]},
+];
+
+======================================================================
+// ── initialEquipment ─────────────────────────────────────────────────
+// 來源：4 設施設備管理程序/記錄/4.4.X潔沛設備維護履歷卡(name).docx
+//       4 設施設備管理程序/記錄/4.5.1設施設備年度計劃表.docx
+const initialEquipment = [
+  { id: "JE-001", name: "超音波清洗機",
+    location: "生產課",
+    lastMaintenance: "2025-08-31",
+    intervalDays: 30,
+    nextItems: ["清洗槽清潔", "超音波強度確認", "加熱溫度校驗", "排水管路檢查"] },
+  { id: "JE-002", name: "終端清洗機",
+    location: "生產課",
+    lastMaintenance: "2025-08-29",
+    intervalDays: 90,
+    nextItems: ["清洗槽清潔", "藥液濃度確認", "噴嘴清潔", "馬達運轉確認"] },
+  { id: "JE-003", name: "OCR 篩選機",
+    location: "生產課",
+    lastMaintenance: "2025-09-06",
+    intervalDays: 90,
+    nextItems: ["光學鏡頭清潔", "排序正確性確認", "定位精度確認", "傳送帶清潔"] },
+  { id: "JE-004", name: "AOI 自動光學檢測儀",
+    location: "品管課",
+    lastMaintenance: "2025-09-06",
+    intervalDays: 90,
+    nextItems: ["光源強度校驗", "鏡頭清潔", "定位精度確認", "軟體更新確認"] },
+  { id: "JE-005", name: "WAFER 厚度量測系統",
+    location: "品管課",
+    lastMaintenance: "",
+    intervalDays: 180,
+    nextItems: ["量測精度確認", "探針清潔", "真空系統確認", "定位校驗"] },
+  { id: "JE-006", name: "NAS 網路儲存系統",
+    location: "管理部",
+    lastMaintenance: "2025-09-09",
+    intervalDays: 365,
+    nextItems: ["硬碟健康狀態確認", "備份完整性確認", "網路連線確認", "UPS 電池確認"] },
+];
+
+======================================================================
+// ── initialSuppliers ─────────────────────────────────────────────────
+// 來源：10 採購及供應商管理程序/記錄/10.3.X供應商定期評鑑表(name).docx
+const initialSuppliers = [
+  { id: "SUP-001", name: "楊特企業有限公司(關鍵供應商)",
+    category: "耗材", contact: "",
+    lastEvalDate: "", evalScore: 95,
+    evalResult: "優良", evalIntervalDays: 365,
+    issues: ["如低於75分以下，請廠商提出改善計劃或考慮替換供應商或終止合作關係。"] },
+  { id: "SUP-002", name: "金華瑋科技有限公司",
+    category: "設備零件", contact: "",
+    lastEvalDate: "", evalScore: 95,
+    evalResult: "優良", evalIntervalDays: 365,
+    issues: ["低於75分以下者，請廠商提出改善計劃或考慮替換供應商或終止合作關係。"] },
+  { id: "SUP-003", name: "柏連企業股份有限公司(關鍵供應商)",
+    category: "化學品", contact: "",
+    lastEvalDate: "", evalScore: 100,
+    evalResult: "優良", evalIntervalDays: 365,
+    issues: ["低於75分以下者，請廠商提出改善計劃或考慮替換供應商或終止合作關係。"] },
+  { id: "SUP-004", name: "鏵友益科技股份有限公司",
+    category: "電子零件", contact: "",
+    lastEvalDate: "", evalScore: 100,
+    evalResult: "優良", evalIntervalDays: 365,
+    issues: ["低於75分以下者，請廠商提出改善計劃或考慮替換供應商或終止合作關係。"] },
+  { id: "SUP-005", name: "奈米趨勢科技有限公司",
+    category: "量測設備", contact: "",
+    lastEvalDate: "", evalScore: 100,
+    evalResult: "優良", evalIntervalDays: 365,
+    issues: ["低於75分以下者，請廠商提出改善計劃或考慮替換供應商或終止合作關係。"] },
+  { id: "SUP-006", name: "拓生科技有限公司(一般供應商)",
+    category: "量測設備", contact: "",
+    lastEvalDate: "", evalScore: 100,
+    evalResult: "優良", evalIntervalDays: 365,
+    issues: ["低於60分以下者，請廠商提出改善計劃或考慮替換供應商或終止合作關係。"] },
+];
+
+======================================================================
+// ── initialNonConformances ───────────────────────────────────────────
+// 來源：15 不符合及矯正措施管理程序/記錄/15.1.1~15.1.2不符合報告表.docx
+const initialNonConformances = [
+  { id: "NC-2025-001", date: "2025-11-12",
+    dept: "管理部", type: "文件不符",
+    description: "不符合事項說明：2025/11/12約16:30，在品檢室裡進行作業時，不慎撞到已洗完待檢測的玻璃掉在地板上導致破裂。不符合單位主管：蔡有為 發現者/稽核員：林佑翰",
+    severity: "輕微",
+    rootCause: "原因分析：品管作業員在作業時不慎撞到FOSB盒，導致盒子掉落並摔破玻璃片。",
+    correctiveAction: "矯正措施：品管作業員已在事發當時馬上清理現場並確保無玻璃碎片殘留，並另外包裝破碎玻璃片至包裝袋並隔離儲存。主管人員已請品管作業員在作業時小心，並注意各物品的擺放",
+    responsible: "",
+    dueDate: "", status: "已關閉",
+    closeDate: "2025-11-12", effectiveness: "有效" },
+  { id: "NC-2026-001", date: "2026-01-28",
+    dept: "品檢課", type: "人員作業",
+    description: "不符合事項說明：品檢人員於檢驗時因操作不慎將產品摔落導致破片。不符合單位主管：林佑翰 發現者/稽核員：朱姿霖",
+    severity: "輕微",
+    rootCause: "一、異常原因調查分析1.What（什麼異常）：AOI測試判定NG後，取出放置NG FOSB，中途玻璃脫落，導致破片。2.Where（發生地點）：無塵室AOI工作",
+    correctiveAction: "一、異常原因調查分析1.What（什麼異常）：AOI測試判定NG後，取出放置NG FOSB，中途玻璃脫落，導致破片。2.Where（發生地點）：無塵室AOI工作",
+    responsible: "",
+    dueDate: "", status: "處理中",
+    closeDate: "", effectiveness: "" },
+];
+
+======================================================================
+// ── initialAuditPlans ────────────────────────────────────────────────
+// 來源：9 內部稽核管理程序/記錄/內部稽核114年度/9.4、9.5.docx
+const initialAuditPlans = [
+  { id: "IA-2025-01", year: 2025, period: "下半年",
+    scheduledDate: "2025-09-04",
+    dept: "全廠", scope: "MP-01,MP-02,MP-03,MP-04,MP-05,MP-06",
+    auditor: "蔡有為", auditee: "程鼎智",
+    status: "已完成", actualDate: "2025-09-05",
+    findings: 2, ncCount: 1 },
+  { id: "IA-2025-02", year: 2025, period: "上半年",
+    scheduledDate: "2025-06-23",
+    dept: "品管課", scope: "MP-11,MP-13",
+    auditor: "已於06", auditee: "程鼎智",
+    status: "已完成", actualDate: "2025-06-23",
+    findings: 1, ncCount: 1 },
+];
+
+======================================================================
+// ── initialEnvRecords ────────────────────────────────────────────────
+// 查無 6 工作環境管理程序/記錄/ 下的實際環境監測紀錄 → 清空
+const initialEnvRecords = [];
