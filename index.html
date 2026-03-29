@@ -1414,7 +1414,7 @@ function SupplierTab({ suppliers, setSuppliers }) {
 }
 
 // ─── NON-CONFORMANCE TAB (MP-15) ─────────────────────────────────────────────
-function NonConformanceTab({ nonConformances: items, setNonConformances: setItems, highlightNcId, onHighlightDone }) {
+function NonConformanceTab({ nonConformances: items, setNonConformances: setItems, highlightNcId, onHighlightDone, expandNcId, onExpandDone }) {
   const emptyDraft = { id:"", date:"", dept:"", type:"製程異常", description:"", severity:"輕微", rootCause:"", correctiveAction:"", responsible:"", dueDate:"", status:"待處理", closeDate:"", effectiveness:"" };
   const [modal, setModal] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -1441,6 +1441,15 @@ function NonConformanceTab({ nonConformances: items, setNonConformances: setItem
       return () => clearTimeout(t);
     }
   }, [highlightNcId]);
+
+  useEffect(() => {
+    if (!expandNcId) return;
+    const nc = items.find(item => String(item.id) === String(expandNcId));
+    if (nc) {
+      setModal(nc);
+      onExpandDone?.();
+    }
+  }, [expandNcId]);
 
   const statusColor = s => s==="已關閉"?"#22c55e":s==="處理中"?"#f97316":s==="待處理"?"#ef4444":"#eab308";
   const sevColor = s => s==="重大"?"#ef4444":s==="中度"?"#eab308":"#60a5fa";
@@ -1977,7 +1986,7 @@ function EnvironmentTab({ envRecords, setEnvRecords }) {
   );
 }
 
-function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords, setQualityRecords, nonConformances, auditPlans, setActiveTab, setHighlightNcId }) {
+function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords, setQualityRecords, nonConformances, auditPlans, setActiveTab, setHighlightNcId, setExpandNcId }) {
   const objectRows = (value) => Array.isArray(value) ? value.filter(item => item && typeof item === "object") : [];
   const safeEnvRecords = objectRows(envRecords);
   const safeProdRecords = objectRows(prodRecords);
@@ -2212,6 +2221,7 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
         ...shipmentForm,
       },
       nonconformance: selectedNc,
+      all_nonconformances: safeNonConformances,
       audit_plans: safeAuditPlans,
       selected_audit_id: selectedAuditId,
     };
@@ -2348,11 +2358,22 @@ function ProductionTab({ envRecords, prodRecords, setProdRecords, qualityRecords
     }
     if (detail.scope === "nonconformance") {
       setActiveTab("nonconformance");
-      if (selectedNcId) setHighlightNcId(selectedNcId);
+      const targetId = detail.item_id || selectedNcId;
+      if (targetId) {
+        setHighlightNcId(targetId);
+        setExpandNcId?.(targetId);
+      }
+      setEngineMessage("已切換到不符合管理，請補齊「" + (detail.label || detail.field_key || "必要欄位") + "」。");
       return;
     }
     if (detail.scope === "environment") {
       setActiveTab("environment");
+      setEngineMessage("已切換到工作環境監控，請先上傳環境監控資料。");
+      return;
+    }
+    if (detail.scope === "audit_plans") {
+      setActiveTab("auditplan");
+      setEngineMessage("已切換到稽核計畫，請補齊「" + (detail.label || detail.field_key || "必要欄位") + "」。");
       return;
     }
   }
@@ -4768,6 +4789,327 @@ function LibraryTab({ documents, manuals }) {
 }
 
 // ─── DASHBOARD HOME ──────────────────────────────────────────────────────────
+// ─── SVG CHART PRIMITIVES ────────────────────────────────────────────────────
+
+function SvgBarChart({ data, width = 420, height = 150, color = "#3b82f6" }) {
+  if (!data || data.length === 0) return <div style={{ color:"#475569", fontSize:12, textAlign:"center", padding:16 }}>尚無資料</div>;
+  const max = Math.max(...data.map(d => d.value), 1);
+  const padL = 8, padR = 8, padB = 22, padT = 16;
+  const innerW = width - padL - padR;
+  const innerH = height - padT - padB;
+  const slotW = innerW / data.length;
+  const barW = Math.max(Math.min(slotW - 6, 36), 6);
+  return (
+    <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ overflow:"visible", display:"block" }}>
+      {[0, 0.5, 1].map(pct => {
+        const y = padT + innerH - pct * innerH;
+        return <line key={pct} x1={padL} y1={y} x2={padL + innerW} y2={y} stroke="rgba(255,255,255,0.05)" />;
+      })}
+      {data.map((d, i) => {
+        const barH = Math.max(Math.round((d.value / max) * innerH), d.value > 0 ? 2 : 0);
+        const x = padL + i * slotW + (slotW - barW) / 2;
+        const y = padT + innerH - barH;
+        return (
+          <g key={i}>
+            <rect x={x} y={y} width={barW} height={barH} rx={3} fill={color} opacity={0.85} />
+            <text x={x + barW / 2} y={height - 4} textAnchor="middle" fill="#475569" fontSize={9}>{d.label}</text>
+            {d.value > 0 && <text x={x + barW / 2} y={y - 3} textAnchor="middle" fill="#cbd5e1" fontSize={9}>{d.value}</text>}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function SvgLineChart({ data, width = 420, height = 140, color = "#22c55e", domainMin, domainMax }) {
+  if (!data || data.length < 2) return <div style={{ color:"#475569", fontSize:12, textAlign:"center", padding:16 }}>需 2 筆以上資料</div>;
+  const vals = data.map(d => d.value);
+  const rawMin = domainMin !== undefined ? domainMin : Math.min(...vals);
+  const rawMax = domainMax !== undefined ? domainMax : Math.max(...vals);
+  const range = rawMax - rawMin || 1;
+  const padL = 36, padR = 12, padT = 16, padB = 24;
+  const w = width - padL - padR;
+  const h = height - padT - padB;
+  const xStep = w / (data.length - 1);
+  const pts = data.map((d, i) => ({
+    x: padL + i * xStep,
+    y: padT + h - ((d.value - rawMin) / range) * h,
+    label: d.label,
+    value: d.value,
+  }));
+  const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const areaPath = linePath + ` L ${pts[pts.length - 1].x.toFixed(1)} ${(padT + h).toFixed(1)} L ${pts[0].x.toFixed(1)} ${(padT + h).toFixed(1)} Z`;
+  return (
+    <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ overflow:"visible", display:"block" }}>
+      {[0, 0.5, 1].map(pct => {
+        const y = padT + h - pct * h;
+        const val = rawMin + pct * range;
+        return (
+          <g key={pct}>
+            <line x1={padL} y1={y} x2={padL + w} y2={y} stroke="rgba(255,255,255,0.05)" />
+            <text x={padL - 4} y={y + 4} textAnchor="end" fill="#475569" fontSize={8}>{val.toFixed(1)}</text>
+          </g>
+        );
+      })}
+      <path d={areaPath} fill={color} opacity={0.08} />
+      <path d={linePath} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+      {pts.map((p, i) => (
+        <g key={i}>
+          <circle cx={p.x} cy={p.y} r={3} fill={color} />
+          <text x={p.x} y={height - 4} textAnchor="middle" fill="#475569" fontSize={8}>{p.label}</text>
+          <text x={p.x} y={p.y - 6} textAnchor="middle" fill="#cbd5e1" fontSize={8}>{p.value.toFixed(1)}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function SvgDonut({ slices, size = 110 }) {
+  const total = slices.reduce((s, x) => s + x.value, 0) || 1;
+  const cx = size / 2, cy = size / 2, r = size * 0.4, ir = size * 0.27;
+  let angle = -Math.PI / 2;
+  const paths = slices.map(sl => {
+    const sweep = (sl.value / total) * 2 * Math.PI;
+    const x1 = cx + r * Math.cos(angle),  y1 = cy + r * Math.sin(angle);
+    angle += sweep;
+    const x2 = cx + r * Math.cos(angle),  y2 = cy + r * Math.sin(angle);
+    const ix1 = cx + ir * Math.cos(angle), iy1 = cy + ir * Math.sin(angle);
+    const ix2 = cx + ir * Math.cos(angle - sweep), iy2 = cy + ir * Math.sin(angle - sweep);
+    const lg = sweep > Math.PI ? 1 : 0;
+    return (
+      <path key={sl.label}
+        d={`M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${lg} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${ix1.toFixed(2)} ${iy1.toFixed(2)} A ${ir} ${ir} 0 ${lg} 0 ${ix2.toFixed(2)} ${iy2.toFixed(2)} Z`}
+        fill={sl.color} opacity={0.9} />
+    );
+  });
+  return <svg width={size} height={size} style={{ display:"block" }}>{paths}</svg>;
+}
+
+// ─── KPI DASHBOARD ───────────────────────────────────────────────────────────
+
+function KpiDashboard({ instruments, suppliers, nonConformances, auditPlans, envRecords, prodRecords, qualityRecords }) {
+  const safeArr = v => (Array.isArray(v) ? v : []);
+  const prods    = safeArr(prodRecords);
+  const ncs      = safeArr(nonConformances);
+  const envs     = safeArr(envRecords);
+  const supps    = safeArr(suppliers);
+  const audits   = safeArr(auditPlans);
+  const qrs      = safeArr(qualityRecords);
+
+  // ── 良品率折線 ──────────────────────────────────────────────
+  const yieldData = prods.map(r => ({
+    label: (r.lot || "").length >= 11 ? (r.lot || "").substring(7, 11) : (r.lot || "").substring(0, 6) || "?",
+    value: parseFloat(r.yieldRate) || 0,
+  }));
+  const avgYield = yieldData.length > 0
+    ? (yieldData.reduce((s, d) => s + d.value, 0) / yieldData.length).toFixed(1) : null;
+
+  // ── NC 月度柱狀 ─────────────────────────────────────────────
+  const ncByMonth = {};
+  ncs.forEach(nc => {
+    const m = (nc.date || "").substring(0, 7) || "未知";
+    ncByMonth[m] = (ncByMonth[m] || 0) + 1;
+  });
+  const ncMonthData = Object.entries(ncByMonth).sort().slice(-6)
+    .map(([k, v]) => ({ label: k.substring(5) + "月", value: v }));
+  const openNc = ncs.filter(n => n.status !== "已關閉").length;
+
+  // ── 環境合格率 ──────────────────────────────────────────────
+  const envTotal = envs.length;
+  const envPass  = envs.filter(r => r.result === "合格").length;
+  const envPassRate = envTotal > 0 ? Math.round(envPass / envTotal * 100) : null;
+  const envByLoc = {};
+  envs.forEach(r => {
+    const loc = r.location || r.point || "未知";
+    if (!envByLoc[loc]) envByLoc[loc] = { pass: 0, total: 0 };
+    envByLoc[loc].total++;
+    if (r.result === "合格") envByLoc[loc].pass++;
+  });
+  const envLocData = Object.entries(envByLoc)
+    .map(([loc, d]) => ({ label: loc.length > 5 ? loc.substring(0, 5) + "…" : loc, value: d.total > 0 ? Math.round(d.pass / d.total * 100) : 0 }));
+
+  // ── 供應商 ──────────────────────────────────────────────────
+  const avgSupplierScore = supps.length > 0
+    ? (supps.reduce((s, x) => s + (parseFloat(x.score) || 0), 0) / supps.length).toFixed(0) : null;
+
+  // ── 稽核完成率 ──────────────────────────────────────────────
+  const auditTotal = audits.length;
+  const auditDone  = audits.filter(a => a.status === "已完成").length;
+  const auditRate  = auditTotal > 0 ? Math.round(auditDone / auditTotal * 100) : null;
+  const auditSlices = [
+    { label: "已完成", value: auditDone,                                               color: "#22c55e" },
+    { label: "進行中", value: audits.filter(a => a.status === "進行中").length,         color: "#3b82f6" },
+    { label: "計畫中", value: audits.filter(a => a.status === "計畫中").length,         color: "#6366f1" },
+    { label: "逾期",   value: audits.filter(a => a.status === "逾期").length,           color: "#ef4444" },
+  ].filter(s => s.value > 0);
+
+  // ── 不良原因 Pareto ─────────────────────────────────────────
+  const defectCount = {};
+  prods.forEach(r => (r.defectReasons || []).forEach(reason => { defectCount[reason] = (defectCount[reason] || 0) + 1; }));
+  const paretoData = Object.entries(defectCount).sort((a, b) => b[1] - a[1]).slice(0, 6)
+    .map(([k, v]) => ({ label: k.length > 8 ? k.substring(0, 8) + "…" : k, value: v }));
+
+  // ── 進料合格率 ──────────────────────────────────────────────
+  const qcTotal = qrs.length;
+  const qcPass  = qrs.filter(r => (r.result || "").toUpperCase() === "PASS").length;
+  const qcRate  = qcTotal > 0 ? Math.round(qcPass / qcTotal * 100) : null;
+
+  // ── KPI hero cards ──────────────────────────────────────────
+  const heroCards = [
+    {
+      label: "平均良品率",
+      value: avgYield !== null ? avgYield + "%" : "–",
+      color: avgYield === null ? "#475569" : parseFloat(avgYield) >= 98 ? "#22c55e" : parseFloat(avgYield) >= 95 ? "#f59e0b" : "#ef4444",
+      desc:  `${prods.length} 批次`,
+    },
+    {
+      label: "未關閉不符合",
+      value: openNc,
+      color: openNc === 0 ? "#22c55e" : openNc <= 3 ? "#f59e0b" : "#ef4444",
+      desc:  `合計 ${ncs.length} 項`,
+    },
+    {
+      label: "環境合格率",
+      value: envPassRate !== null ? envPassRate + "%" : "–",
+      color: envPassRate === null ? "#475569" : envPassRate >= 90 ? "#22c55e" : envPassRate >= 80 ? "#f59e0b" : "#ef4444",
+      desc:  `${envTotal} 筆記錄`,
+    },
+    {
+      label: "供應商平均分",
+      value: avgSupplierScore !== null ? avgSupplierScore : "–",
+      color: avgSupplierScore === null ? "#475569" : parseFloat(avgSupplierScore) >= 85 ? "#22c55e" : parseFloat(avgSupplierScore) >= 70 ? "#f59e0b" : "#ef4444",
+      desc:  `${supps.length} 家`,
+    },
+    {
+      label: "稽核完成率",
+      value: auditRate !== null ? auditRate + "%" : "–",
+      color: auditRate === null ? "#475569" : auditRate >= 80 ? "#22c55e" : auditRate >= 50 ? "#f59e0b" : "#ef4444",
+      desc:  `${auditDone}/${auditTotal} 場`,
+    },
+    {
+      label: "進料合格率",
+      value: qcRate !== null ? qcRate + "%" : "–",
+      color: qcRate === null ? "#475569" : qcRate >= 95 ? "#22c55e" : qcRate >= 80 ? "#f59e0b" : "#ef4444",
+      desc:  `${qcTotal} 批`,
+    },
+  ];
+
+  const panel = (children, style = {}) => (
+    <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:20, ...style }}>
+      {children}
+    </div>
+  );
+  const sectionTitle = t => <div style={{ fontSize:13, fontWeight:700, color:"#e2e8f0", marginBottom:14 }}>{t}</div>;
+
+  return (
+    <div>
+      {/* ── 標題 ── */}
+      <div style={{ marginBottom:24 }}>
+        <div style={{ fontSize:20, fontWeight:800, color:"#e2e8f0" }}>生產績效儀表板</div>
+        <div style={{ fontSize:13, color:"#64748b", marginTop:4 }}>
+          高階主管視圖 — {new Date().toLocaleString("zh-TW", { year:"numeric", month:"long", day:"numeric", hour:"2-digit", minute:"2-digit" })}
+        </div>
+      </div>
+
+      {/* ── Hero KPI 卡片 ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:12, marginBottom:20 }}>
+        {heroCards.map(k => (
+          <div key={k.label} style={{ background:"rgba(255,255,255,0.03)", border:`1px solid ${k.color}30`, borderRadius:14, padding:"18px 16px" }}>
+            <div style={{ fontSize:28, fontWeight:800, color:k.color, lineHeight:1 }}>{k.value}</div>
+            <div style={{ fontSize:12, color:"#94a3b8", marginTop:6 }}>{k.label}</div>
+            <div style={{ fontSize:11, color:"#475569", marginTop:3 }}>{k.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── 第一排：良品率 + NC 月度 ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
+        {panel(<>
+          {sectionTitle("批次良品率趨勢（%）")}
+          <SvgLineChart data={yieldData} color="#22c55e" domainMin={90} domainMax={100} />
+        </>)}
+        {panel(<>
+          {sectionTitle("不符合項月度件數")}
+          {ncMonthData.length === 0
+            ? <div style={{ color:"#475569", fontSize:12 }}>尚無不符合記錄</div>
+            : <SvgBarChart data={ncMonthData} color="#f59e0b" />
+          }
+        </>)}
+      </div>
+
+      {/* ── 第二排：環境各點合格率 + Pareto ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
+        {panel(<>
+          {sectionTitle("各監測點環境合格率（%）")}
+          {envLocData.length === 0
+            ? <div style={{ color:"#475569", fontSize:12 }}>尚無環境記錄</div>
+            : <SvgBarChart data={envLocData} color="#38bdf8" />
+          }
+        </>)}
+        {panel(<>
+          {sectionTitle("不良原因 Pareto（件）")}
+          {paretoData.length === 0
+            ? <div style={{ color:"#475569", fontSize:12 }}>尚無不良原因記錄</div>
+            : <SvgBarChart data={paretoData} color="#ef4444" />
+          }
+        </>)}
+      </div>
+
+      {/* ── 第三排：供應商橫條 + 稽核圓環 ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:16 }}>
+        {panel(<>
+          {sectionTitle("供應商評分一覽")}
+          <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
+            {supps.length === 0 && <div style={{ color:"#475569", fontSize:12 }}>尚無供應商記錄</div>}
+            {supps.slice(0, 8).map(s => {
+              const score = parseFloat(s.score) || 0;
+              const barColor = score >= 85 ? "#22c55e" : score >= 70 ? "#f59e0b" : "#ef4444";
+              return (
+                <div key={s.id || s.name} style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <div style={{ fontSize:12, color:"#94a3b8", width:72, flexShrink:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name || "–"}</div>
+                  <div style={{ flex:1, background:"rgba(255,255,255,0.05)", borderRadius:4, height:10, overflow:"hidden" }}>
+                    <div style={{ width:score + "%", height:"100%", background:barColor, borderRadius:4, transition:"width 0.6s ease" }} />
+                  </div>
+                  <div style={{ fontSize:12, fontWeight:700, color:barColor, width:28, textAlign:"right", flexShrink:0 }}>{score}</div>
+                </div>
+              );
+            })}
+          </div>
+        </>)}
+        {panel(<>
+          {sectionTitle("稽核計畫完成率")}
+          {auditSlices.length === 0
+            ? <div style={{ color:"#475569", fontSize:12 }}>尚無稽核計畫</div>
+            : (
+              <div style={{ display:"flex", alignItems:"center", gap:20 }}>
+                <SvgDonut slices={auditSlices} size={110} />
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {[
+                    { label:"已完成", color:"#22c55e", count: auditDone },
+                    { label:"進行中", color:"#3b82f6", count: audits.filter(a => a.status === "進行中").length },
+                    { label:"計畫中", color:"#6366f1", count: audits.filter(a => a.status === "計畫中").length },
+                    { label:"逾期",   color:"#ef4444", count: audits.filter(a => a.status === "逾期").length },
+                  ].map(item => (
+                    <div key={item.label} style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <div style={{ width:8, height:8, borderRadius:"50%", background:item.color, flexShrink:0 }} />
+                      <div style={{ fontSize:11, color:"#94a3b8" }}>{item.label}</div>
+                      <div style={{ fontSize:12, fontWeight:700, color:item.color, marginLeft:"auto", paddingLeft:8 }}>{item.count}</div>
+                    </div>
+                  ))}
+                  <div style={{ fontSize:13, fontWeight:800, color: auditRate !== null ? (auditRate >= 80 ? "#22c55e" : auditRate >= 50 ? "#f59e0b" : "#ef4444") : "#475569", marginTop:4, borderTop:"1px solid rgba(255,255,255,0.07)", paddingTop:6 }}>
+                    完成率 {auditRate !== null ? auditRate + "%" : "–"}
+                  </div>
+                </div>
+              </div>
+            )
+          }
+        </>)}
+      </div>
+    </div>
+  );
+}
+
+// ─── DASHBOARD HOME ───────────────────────────────────────────────────────────
 function DashboardHome({ instruments, documents, training, equipment, suppliers, nonConformances, auditPlans, envRecords, setActiveTab }) {
   const now = new Date(); now.setHours(0,0,0,0);
   const overdueInst = instruments.filter(i => daysUntil(i.nextCalibration) < 0).length;
@@ -4874,6 +5216,7 @@ function App() {
   const [suppliers, setSuppliers] = useState(initialSuppliers);
   const [nonConformances, setNonConformances] = useState(initialNonConformances);
   const [highlightNcId, setHighlightNcId] = useState(null);
+  const [expandNcId, setExpandNcId] = useState(null);
   const [auditPlans, setAuditPlans] = useState(initialAuditPlans);
   const [envRecords, setEnvRecords] = useState(initialEnvRecords);
   const [prodRecords, setProdRecords] = useState(() => loadStoredState("audit_prodrecords", initialProdRecords));
@@ -4906,6 +5249,7 @@ function App() {
 
   const tabs = [
     { id: "home",           label: "主控台",   icon: "⌂" },
+    { id: "kpi",            label: "績效儀表板", icon: "▦" },
     { id: "calibration",    label: "校正管理", icon: "◎" },
     { id: "documents",      label: "文件管理", icon: "≡" },
     { id: "library",        label: "文件庫",   icon: "📂" },
@@ -4924,16 +5268,17 @@ function App() {
   function renderTab() {
     switch(activeTab) {
       case "home":           return <DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setActiveTab} />;
+      case "kpi":            return <KpiDashboard instruments={instruments} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} prodRecords={prodRecords} qualityRecords={qualityRecords} />;
       case "calibration":    return <CalibrationTab instruments={instruments} setInstruments={setInstruments} />;
       case "documents":      return <DocumentsManagerTab documents={documents} setDocuments={setDocuments} manuals={manuals} />;
       case "library":        return <LibraryHierarchyTab documents={documents} manuals={manuals} />;
       case "training":       return <TrainingTab training={training} setTraining={setTraining} />;
       case "equipment":      return <EquipmentTab equipment={equipment} setEquipment={setEquipment} />;
       case "supplier":       return <SupplierTab suppliers={suppliers} setSuppliers={setSuppliers} />;
-      case "nonconformance": return <NonConformanceTab nonConformances={nonConformances} setNonConformances={setNonConformances} highlightNcId={highlightNcId} onHighlightDone={() => setHighlightNcId(null)} />;
+      case "nonconformance": return <NonConformanceTab nonConformances={nonConformances} setNonConformances={setNonConformances} highlightNcId={highlightNcId} onHighlightDone={() => setHighlightNcId(null)} expandNcId={expandNcId} onExpandDone={() => setExpandNcId(null)} />;
       case "auditplan":      return <AuditPlanTab auditPlans={auditPlans} setAuditPlans={setAuditPlans} />;
       case "environment":    return <EnvironmentTab envRecords={envRecords} setEnvRecords={setEnvRecords} />;
-    case "production":     return <PageErrorBoundary pageName="????" storageKeys={["audit_prodrecords", "audit_qualityrecords"]}><ProductionTab envRecords={envRecords} prodRecords={prodRecords} setProdRecords={setProdRecords} qualityRecords={qualityRecords} setQualityRecords={setQualityRecords} nonConformances={nonConformances} auditPlans={auditPlans} setActiveTab={setActiveTab} setHighlightNcId={setHighlightNcId} /></PageErrorBoundary>;
+    case "production":     return <PageErrorBoundary pageName="????" storageKeys={["audit_prodrecords", "audit_qualityrecords"]}><ProductionTab envRecords={envRecords} prodRecords={prodRecords} setProdRecords={setProdRecords} qualityRecords={qualityRecords} setQualityRecords={setQualityRecords} nonConformances={nonConformances} auditPlans={auditPlans} setActiveTab={setActiveTab} setHighlightNcId={setHighlightNcId} setExpandNcId={setExpandNcId} /></PageErrorBoundary>;
       case "notification":   return <NotificationTab instruments={instruments} documents={documents} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} />;
       case "aiworkbench":    return <AIWorkbenchTab documents={documents} manuals={manuals} nonConformances={nonConformances} />;
       case "report":         return <ReportTab instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} />;

@@ -129,6 +129,15 @@ TEMPLATES = [
         "downstream": [],
         "includes": ["audit_notice"],
     },
+    {
+        "code": "management_review_pack",
+        "title": "16 管理審查流程包",
+        "description": "自動彙整各類記錄，產生 ISO 9001 第 9.3 條所需的管理審查輸入摘要與決議記錄表。",
+        "requires": [],
+        "bundle": True,
+        "downstream": [],
+        "includes": [],
+    },
 ]
 
 KEYWORDS = {
@@ -145,6 +154,7 @@ KEYWORDS = {
     "env_monthly_pack": ["\u74b0\u5883\u6708\u5831", "\u76e3\u63a7\u6708\u5831", "\u5de5\u4f5c\u74b0\u5883\u6708\u5831", "\u74b0\u5883\u76e3\u63a7\u6708\u5831", "\u7c92\u5b50\u6708\u5831"],
     "audit_notice": ["稽核通知", "內部稽核通知", "稽核通知書", "稽核計畫通知"],
     "audit_pack": ["稽核流程包", "稽核包", "稽核文件包", "內部稽核流程"],
+    "management_review_pack": ["管理審查", "管理評審", "管審", "管理審查流程包", "management review", "管理審查記錄", "管理審查報告"],
 }
 
 
@@ -199,6 +209,14 @@ def suggest_templates(prompt: str, context: dict | None = None) -> list[dict]:
                 score += 1
             if template["requires"] == ["nonconformance"] and (context.get("nonconformance_count") or 0) > 0:
                 score += 1
+            if template["code"] == "management_review_pack":
+                data_sources = (
+                    (1 if (context.get("prod_count") or 0) > 0 else 0) +
+                    (1 if (context.get("quality_count") or 0) > 0 else 0) +
+                    (1 if (context.get("env_count") or 0) > 0 else 0) +
+                    (1 if (context.get("nonconformance_count") or 0) > 0 else 0)
+                )
+                score += data_sources
         if score > 0:
             ranked.append((score, template))
     ranked.sort(key=lambda item: (-item[0], item[1]["title"]))
@@ -346,6 +364,14 @@ def precheck_template(payload: dict) -> dict:
         warnings.append("稽核通知書包含通知書本體與稽核查檢範圍工作表，請稽核員於執行稽核時填入查驗結果。")
     if template_code == "audit_pack":
         warnings.append("稽核流程包含稽核通知書（含查檢範圍），ZIP 解壓後可直接使用。")
+    if template_code == "management_review_pack":
+        warnings.append("管理審查流程包包含：輸入摘要（自動帶入現有資料）與決議記錄表（空白模板）。")
+        if not any([
+            payload.get("prod_records"), payload.get("quality_records"),
+            payload.get("env_records"), payload.get("audit_plans"),
+            payload.get("all_nonconformances"),
+        ]):
+            warnings.append("目前各類記錄均為空，建議先上傳各類記錄後再產生，以獲得完整摘要。")
 
     downstream_templates = [
         {"code": template_map[code]["code"], "title": template_map[code]["title"], "description": template_map[code]["description"]}
@@ -687,19 +713,25 @@ def _build_env_monthly_summary(payload: dict):
 
     # ── 異常明細工作表（僅列警告 / 不合格記錄）──────────
     anomaly_ws = wb.create_sheet("異常明細")
-    anomaly_ws.append(["日期", "點位", "地點", "0.3μm", "0.5μm", "5.0μm", "溫度", "濕度", "正壓", "記錄者", "結果"])
+    anomaly_ws.append(["日期", "點位", "地點", "0.3μm", "0.5μm", "5.0μm", "溫度", "濕度", "正壓", "記錄者", "結果", "建議追蹤"])
     anomaly_records = [
         r for r in records
         if _normalize_text(r.get("result")) in ("警告", "不合格")
     ]
     if anomaly_records:
         for r_idx, item in enumerate(anomaly_records, start=2):
+            result_val = _normalize_text(item.get("result")) or ""
+            suggestion = (
+                "請立即停止相關作業，確認設備狀況，調查超標原因並提出改善措施。"
+                if result_val == "不合格"
+                else "請加強該點位監控頻率，確認是否需要清潔或校正設備。"
+            )
             anomaly_ws.append([
                 item.get("date"), item.get("point"), item.get("location"),
                 item.get("particles03"), item.get("particles05"),
                 item.get("particles5") or item.get("particles50"),
                 item.get("temp"), item.get("humidity"), item.get("pressure"),
-                item.get("operator"), item.get("result"),
+                item.get("operator"), item.get("result"), suggestion,
             ])
             _style_row_by_result(anomaly_ws, r_idx, _normalize_text(item.get("result")) or "")
     else:
@@ -1015,6 +1047,306 @@ def _build_audit_pack(payload: dict) -> tuple:
     return _zip_files(entries, f"{audit_id}_稽核流程包.zip")
 
 
+def _build_management_review_summary(payload: dict):
+    """產生管理審查輸入摘要工作簿（多工作表）。"""
+    today_str = datetime.today().strftime("%Y-%m-%d")
+    year_month = datetime.today().strftime("%Y%m")
+    year = datetime.today().strftime("%Y")
+
+    prod_records = list(payload.get("prod_records") or [])
+    quality_records = list(payload.get("quality_records") or [])
+    env_records = _sort_env_records(list(payload.get("env_records") or []))
+    audit_plans = list(payload.get("audit_plans") or [])
+    all_nc = list(payload.get("all_nonconformances") or [])
+
+    # 預算統計
+    nc_total = len(all_nc)
+    nc_open = sum(1 for x in all_nc if _normalize_text(x.get("status")) not in ("已關閉", "Closed"))
+    audit_done = sum(1 for x in audit_plans if _normalize_text(x.get("status")) == "已完成")
+    audit_findings = sum(x.get("findings") or 0 for x in audit_plans)
+    audit_nc = sum(x.get("ncCount") or 0 for x in audit_plans)
+    env_total = len(env_records)
+    env_fail = sum(1 for x in env_records if _normalize_text(x.get("result")) == "不合格")
+    env_warn = sum(1 for x in env_records if _normalize_text(x.get("result")) == "警告")
+
+    wb = Workbook()
+
+    # ── 封面 ────────────────────────────────────────────
+    cover = wb.active
+    cover.title = "封面"
+    cover["A1"] = "潔沛企業有限公司"
+    cover["A1"].font = Font(bold=True, size=18, color="1E3A5F", name="Calibri")
+    cover["A2"] = "16 管理審查輸入摘要報告"
+    cover["A2"].font = Font(bold=True, size=14, color="2563EB", name="Calibri")
+    cover["A3"] = f"審查年度：{year} 年"
+    cover["A3"].font = Font(size=11, color="475569", name="Calibri")
+
+    info_rows = [
+        ("項目", "內容"),
+        ("審查日期", today_str),
+        ("主持人", ""),
+        ("出席部門", "品管 / 生產 / 採購 / 業務 / 管理"),
+        ("審查範圍", "QMS 全系統"),
+        ("下次審查預定", ""),
+    ]
+    for r_idx, (label, val) in enumerate(info_rows, start=5):
+        cover.cell(r_idx, 1, label)
+        cover.cell(r_idx, 2, val)
+    _style_header_row(cover, row=5, fill_hex="1E3A5F")
+    for r_idx in range(6, 5 + len(info_rows)):
+        for col in [1, 2]:
+            cover.cell(r_idx, col).border = _BORDER
+
+    # 資料來源摘要小表
+    cover["A13"] = "資料來源摘要"
+    cover["A13"].font = Font(bold=True, color="1E3A5F", name="Calibri")
+    data_rows = [
+        ("資料類別", "筆數", "說明"),
+        ("不符合記錄", nc_total, f"未關閉 {nc_open} 筆" if nc_total else "無記錄"),
+        ("內部稽核計畫", len(audit_plans), f"已完成 {audit_done} 次，發現 {audit_findings} 項" if audit_plans else "無記錄"),
+        ("環境監控記錄", env_total, f"異常 {env_warn + env_fail} 筆" if env_total else "無記錄"),
+        ("生產批次記錄", len(prod_records), ""),
+        ("進料檢驗記錄", len(quality_records), ""),
+    ]
+    for r_idx, row_data in enumerate(data_rows, start=14):
+        for col_idx, val in enumerate(row_data, start=1):
+            cover.cell(r_idx, col_idx, val)
+    _style_header_row(cover, row=14, fill_hex="1E4E8C")
+    for r_idx in range(15, 14 + len(data_rows)):
+        for col in range(1, 4):
+            cover.cell(r_idx, col).border = _BORDER
+
+    cover["A22"] = "製表人";    cover["B22"] = ""
+    cover["A23"] = "主管核准";  cover["B23"] = ""
+    cover["A24"] = "製表日期";  cover["B24"] = today_str
+    for r in [22, 23, 24]:
+        for col in [1, 2]:
+            cover.cell(r, col).border = _BORDER
+    cover.column_dimensions["A"].width = 18
+    cover.column_dimensions["B"].width = 40
+    cover.column_dimensions["C"].width = 36
+
+    # ── 輸入項目清單（ISO 9001 9.3.2）──────────────────
+    inputs_ws = wb.create_sheet("輸入項目清單")
+    inputs_ws["A1"] = "管理審查輸入項目（依 ISO 9001:2015 第 9.3.2 條）"
+    inputs_ws["A1"].font = Font(bold=True, size=12, color="1E3A5F", name="Calibri")
+    header = ["項次", "輸入項目", "資料來源", "本期摘要（自動帶入）", "評估 / 備註"]
+    for col_idx, h in enumerate(header, start=1):
+        inputs_ws.cell(3, col_idx, h)
+    _style_header_row(inputs_ws, row=3, fill_hex="1E3A5F")
+
+    inputs_data = [
+        ("a",   "上次管理審查行動事項追蹤",     "前次決議記錄",           "（請填入上次決議追蹤狀況）"),
+        ("b",   "外部與內部議題變更",             "環境分析、法規更新",     "（請填入本期重要變化）"),
+        ("c-1", "顧客滿意度與回饋",               "客訴記錄、滿意度調查",   "（請填入客訴筆數與滿意度）"),
+        ("c-2", "品質目標達成情形",               "生產記錄、檢驗報告",
+         f"生產 {len(prod_records)} 批次，進料檢驗 {len(quality_records)} 筆"),
+        ("c-3", "製程績效與產品符合性",           "生產日報、品質記錄",
+         f"共 {len(prod_records)} 批次，詳見「品質績效摘要」工作表"),
+        ("c-4", "不符合事項與矯正措施",           "不符合管理記錄",
+         f"共 {nc_total} 筆，未關閉 {nc_open} 筆，詳見「不符合統計」"),
+        ("c-5", "量測監控結果",                   "環境監控、儀器校正",
+         f"環境監控 {env_total} 筆，異常 {env_warn + env_fail} 筆"),
+        ("c-6", "稽核結果",                       "內部稽核計畫",
+         f"已執行 {audit_done} 次，發現 {audit_findings} 項，不符合 {audit_nc} 項"),
+        ("c-7", "外部供應商績效",                 "供應商評鑑記錄",         "（請填入供應商評鑑摘要）"),
+        ("d",   "資源適當性",                     "人力、設備、設施",       "（請填入資源需求評估）"),
+        ("e",   "風險與機會行動有效性",           "風險分析記錄",           "（請填入風險控制評估）"),
+        ("f",   "改善機會",                       "前述各項綜合評估",       "（請填入本期改善建議）"),
+    ]
+    for r_idx, row_data in enumerate(inputs_data, start=4):
+        for col_idx, val in enumerate(row_data, start=1):
+            cell = inputs_ws.cell(r_idx, col_idx, val)
+            cell.border = _BORDER
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+        inputs_ws.row_dimensions[r_idx].height = 28
+    inputs_ws.column_dimensions["A"].width = 6
+    inputs_ws.column_dimensions["B"].width = 26
+    inputs_ws.column_dimensions["C"].width = 22
+    inputs_ws.column_dimensions["D"].width = 42
+    inputs_ws.column_dimensions["E"].width = 20
+
+    # ── 品質績效摘要 ─────────────────────────────────────
+    perf_ws = wb.create_sheet("品質績效摘要")
+    perf_ws["A1"] = "品質績效摘要"
+    perf_ws["A1"].font = Font(bold=True, size=12, color="1E3A5F", name="Calibri")
+    perf_ws["A3"] = "一、生產批次績效"
+    perf_ws["A3"].font = Font(bold=True, color="1E4E8C", name="Calibri")
+    prod_headers = ["批號", "客戶", "產品", "投入", "良品", "不良", "良率", "日期"]
+    for col_idx, h in enumerate(prod_headers, start=1):
+        perf_ws.cell(5, col_idx, h)
+    _style_header_row(perf_ws, row=5, fill_hex="1E4E8C")
+    for r_idx, item in enumerate(prod_records, start=6):
+        perf_ws.cell(r_idx, 1, item.get("lot"))
+        perf_ws.cell(r_idx, 2, item.get("customer"))
+        perf_ws.cell(r_idx, 3, item.get("product"))
+        perf_ws.cell(r_idx, 4, item.get("input"))
+        perf_ws.cell(r_idx, 5, item.get("good"))
+        perf_ws.cell(r_idx, 6, item.get("defect"))
+        perf_ws.cell(r_idx, 7, item.get("yieldRate"))
+        perf_ws.cell(r_idx, 8, item.get("date"))
+        for col in range(1, 9):
+            perf_ws.cell(r_idx, col).border = _BORDER
+    if not prod_records:
+        perf_ws.cell(6, 1, "（本期無生產記錄）")
+
+    q_start = 6 + len(prod_records) + 3
+    perf_ws.cell(q_start, 1, "二、進料檢驗績效")
+    perf_ws.cell(q_start, 1).font = Font(bold=True, color="1E4E8C", name="Calibri")
+    q_hdr_row = q_start + 2
+    q_headers = ["材料名稱", "批號", "數量", "規格", "PH", "比重", "結果", "備註"]
+    for col_idx, h in enumerate(q_headers, start=1):
+        perf_ws.cell(q_hdr_row, col_idx, h)
+    _style_header_row(perf_ws, row=q_hdr_row, fill_hex="1E4E8C")
+    for r_idx, item in enumerate(quality_records, start=q_hdr_row + 1):
+        perf_ws.cell(r_idx, 1, item.get("materialName"))
+        perf_ws.cell(r_idx, 2, item.get("batchNo"))
+        perf_ws.cell(r_idx, 3, item.get("quantity"))
+        perf_ws.cell(r_idx, 4, item.get("spec"))
+        perf_ws.cell(r_idx, 5, item.get("ph"))
+        perf_ws.cell(r_idx, 6, item.get("density"))
+        perf_ws.cell(r_idx, 7, item.get("result"))
+        perf_ws.cell(r_idx, 8, item.get("note"))
+        for col in range(1, 9):
+            perf_ws.cell(r_idx, col).border = _BORDER
+    if not quality_records:
+        perf_ws.cell(q_hdr_row + 1, 1, "（本期無進料檢驗記錄）")
+    _autofit_columns(perf_ws)
+
+    # ── 不符合統計 ───────────────────────────────────────
+    nc_ws = wb.create_sheet("不符合統計")
+    nc_ws["A1"] = "不符合事項統計"
+    nc_ws["A1"].font = Font(bold=True, size=12, color="1E3A5F", name="Calibri")
+    nc_ws["A3"] = "統計摘要"
+    nc_ws["A3"].font = Font(bold=True, color="1E4E8C", name="Calibri")
+    kpi_nc = [
+        ("項目", "數值"),
+        ("總筆數", nc_total),
+        ("已關閉", nc_total - nc_open),
+        ("未關閉", nc_open),
+        ("關閉率", f"{round((nc_total - nc_open) / nc_total * 100, 1)}%" if nc_total else "N/A"),
+    ]
+    for r_idx, (label, val) in enumerate(kpi_nc, start=4):
+        nc_ws.cell(r_idx, 1, label)
+        nc_ws.cell(r_idx, 2, val)
+    _style_header_row(nc_ws, row=4, fill_hex="7F1D1D" if nc_open > 0 else "1E4E8C")
+    for r_idx in range(5, 4 + len(kpi_nc)):
+        for col in [1, 2]:
+            nc_ws.cell(r_idx, col).border = _BORDER
+
+    nc_ws.cell(11, 1, "不符合記錄明細")
+    nc_ws.cell(11, 1).font = Font(bold=True, color="1E4E8C", name="Calibri")
+    nc_headers = ["編號", "發生日期", "部門", "類型", "嚴重度", "問題描述", "狀態", "到期日", "有效性"]
+    for col_idx, h in enumerate(nc_headers, start=1):
+        nc_ws.cell(12, col_idx, h)
+    _style_header_row(nc_ws, row=12, fill_hex="1E3A5F")
+    for r_idx, item in enumerate(all_nc, start=13):
+        vals = [
+            item.get("id"), item.get("date"), item.get("dept"),
+            item.get("type"), item.get("severity"), item.get("description"),
+            item.get("status"), item.get("dueDate"), item.get("effectiveness"),
+        ]
+        for col_idx, val in enumerate(vals, start=1):
+            cell = nc_ws.cell(r_idx, col_idx, val)
+            cell.border = _BORDER
+        if _normalize_text(item.get("status")) not in ("已關閉", "Closed"):
+            for col in range(1, 10):
+                nc_ws.cell(r_idx, col).fill = _hdr_fill("FEE2E2")
+    if not all_nc:
+        nc_ws.cell(13, 1, "（本期無不符合記錄）")
+    _autofit_columns(nc_ws)
+
+    # ── 稽核結果摘要 ─────────────────────────────────────
+    audit_ws = wb.create_sheet("稽核結果摘要")
+    audit_ws["A1"] = "內部稽核結果摘要"
+    audit_ws["A1"].font = Font(bold=True, size=12, color="1E3A5F", name="Calibri")
+    a_headers = ["稽核編號", "年度", "期別", "預定日期", "實際日期", "受稽部門", "稽核員", "狀態", "發現筆數", "不符合數"]
+    for col_idx, h in enumerate(a_headers, start=1):
+        audit_ws.cell(3, col_idx, h)
+    _style_header_row(audit_ws, row=3, fill_hex="1E3A5F")
+    for r_idx, item in enumerate(audit_plans, start=4):
+        vals = [
+            item.get("id"), item.get("year"), item.get("period"),
+            item.get("scheduledDate"), item.get("actualDate"), item.get("dept"),
+            item.get("auditor"), item.get("status"),
+            item.get("findings") or 0, item.get("ncCount") or 0,
+        ]
+        for col_idx, val in enumerate(vals, start=1):
+            audit_ws.cell(r_idx, col_idx, val).border = _BORDER
+    if not audit_plans:
+        audit_ws.cell(4, 1, "（本期無稽核計畫記錄）")
+    _autofit_columns(audit_ws)
+
+    path = _tmp_xlsx()
+    wb.save(path)
+    wb.close()
+    return path, f"16_管理審查輸入摘要_{year_month}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _build_management_review_decisions(payload: dict):
+    """產生管理審查決議記錄表（含預設議題的空白模板）。"""
+    today_str = datetime.today().strftime("%Y-%m-%d")
+    year_month = datetime.today().strftime("%Y%m")
+
+    wb, ws = _new_wb("決議記錄")
+    ws["A1"] = "潔沛企業有限公司"
+    ws["A1"].font = Font(bold=True, size=14, color="1E3A5F", name="Calibri")
+    ws["A2"] = "16 管理審查決議記錄表"
+    ws["A2"].font = Font(bold=True, size=12, color="2563EB", name="Calibri")
+    ws["A3"] = f"審查日期：{today_str}　　主持人：　　　　　出席人員："
+    ws["A3"].font = Font(size=10, color="475569", name="Calibri")
+
+    headers = ["議題", "討論重點摘要", "決議事項", "負責部門 / 人", "完成期限", "追蹤狀態"]
+    for col_idx, h in enumerate(headers, start=1):
+        ws.cell(5, col_idx, h)
+    _style_header_row(ws, row=5, fill_hex="1E3A5F")
+
+    default_topics = [
+        "上次審查行動事項追蹤",
+        "品質目標達成評估",
+        "製程績效與產品符合性",
+        "不符合事項與矯正措施追蹤",
+        "顧客滿意度與回饋",
+        "內部稽核結果",
+        "供應商績效評估",
+        "資源需求評估",
+        "改善機會與後續行動",
+    ]
+    for r_idx, topic in enumerate(default_topics, start=6):
+        ws.cell(r_idx, 1, topic)
+        for col in range(1, 7):
+            ws.cell(r_idx, col).border = _BORDER
+            ws.cell(r_idx, col).alignment = Alignment(vertical="center", wrap_text=True)
+        ws.row_dimensions[r_idx].height = 36
+
+    ws.column_dimensions["A"].width = 24
+    ws.column_dimensions["B"].width = 36
+    ws.column_dimensions["C"].width = 36
+    ws.column_dimensions["D"].width = 18
+    ws.column_dimensions["E"].width = 14
+    ws.column_dimensions["F"].width = 14
+
+    sign_row = 6 + len(default_topics) + 2
+    ws.cell(sign_row, 1, "主持人簽名：")
+    ws.cell(sign_row, 3, "記錄人簽名：")
+    ws.cell(sign_row, 5, "核准：")
+
+    path = _tmp_xlsx()
+    wb.save(path)
+    wb.close()
+    return path, f"16_管理審查決議記錄_{year_month}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _build_management_review_pack(payload: dict):
+    """產生管理審查流程包（輸入摘要 + 決議記錄 ZIP）。"""
+    year_month = datetime.today().strftime("%Y%m")
+    entries = [
+        _build_management_review_summary(payload),
+        _build_management_review_decisions(payload),
+    ]
+    return _zip_files(entries, f"{year_month}_管理審查流程包.zip")
+
+
 def generate_template(payload: dict):
     template_code = _normalize_text(payload.get("template_code"))
     if not template_code:
@@ -1048,6 +1380,8 @@ def generate_template(payload: dict):
         return _build_audit_notice(payload)
     if template_code == "audit_pack":
         return _build_audit_pack(payload)
+    if template_code == "management_review_pack":
+        return _build_management_review_pack(payload)
     raise ValueError(f"Unsupported template_code: {template_code}")
 
 
