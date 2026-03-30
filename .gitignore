@@ -35,3 +35,4 @@ _test_output_*.xlsx
 
 # Large local installers should not go to GitHub
 *.exe
+spc_history.json
