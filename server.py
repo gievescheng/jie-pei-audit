@@ -352,6 +352,78 @@ def api_preview_text_file():
     return Response(html_payload, mimetype='text/html')
 
 
+@app.route('/api/document/extract-markdown')
+def api_document_extract_markdown():
+    """
+    GET /api/document/extract-markdown?path=<stored_path>
+    使用 opendataloader-pdf 將指定文件轉為 Markdown，供 AI 工作台 / RAG 使用。
+    支援 .pdf（ODL）、.docx、.xlsx（轉純文字）。
+    若路徑不存在或解析失敗，回傳 404/500。
+    """
+    from pdf_structured_parser import (
+        extract_pdf_markdown,
+        extract_pdf_text,
+        is_available as odl_available,
+        PdfExtractionError,
+    )
+
+    stored_path = request.args.get('path', '').strip()
+    if not stored_path:
+        return json_error('缺少 path 參數', 400)
+
+    file_path = ops_data.get_serving_path(stored_path)
+    if file_path is None:
+        return json_error(f'找不到檔案：{stored_path}', 404)
+
+    ext = file_path.suffix.lower()
+    markdown = ""
+    method_used = "unknown"
+
+    try:
+        if ext == '.pdf' and odl_available():
+            try:
+                markdown = extract_pdf_markdown(file_path)
+                method_used = "opendataloader-pdf (markdown)"
+            except PdfExtractionError:
+                # fallback: 用純文字包成 code block
+                text = extract_pdf_text(file_path)
+                markdown = f"```\n{text}\n```"
+                method_used = "opendataloader-pdf (text fallback)"
+        elif ext == '.pdf':
+            # ODL 不可用 → pypdf
+            from ops_data import _flatten_pdf_pypdf
+            text = _flatten_pdf_pypdf(file_path)
+            markdown = f"```\n{text}\n```"
+            method_used = "pypdf"
+        else:
+            # docx / xlsx / csv → 純文字
+            text = ops_data._extract_text(file_path)
+            if ext == '.docx':
+                # 把段落換行保留，包成 Markdown 段落
+                lines = [l for l in text.splitlines() if l.strip()]
+                markdown = "\n\n".join(lines)
+                method_used = "python-docx"
+            else:
+                markdown = f"```\n{text}\n```"
+                method_used = "openpyxl/csv"
+
+        char_count = len(markdown)
+        return jsonify({
+            'success': True,
+            'path': stored_path,
+            'filename': file_path.name,
+            'ext': ext,
+            'markdown': markdown[:200_000],   # 最多 200KB，避免傳輸過大
+            'char_count': char_count,
+            'truncated': char_count > 200_000,
+            'method': method_used,
+        })
+
+    except Exception as exc:
+        traceback.print_exc()
+        return json_error(f'文件抽取失敗：{exc}', 500)
+
+
 @app.route('/api/nonconformances', methods=['GET'])
 def api_nonconformances_list():
     return jsonify({'items': ops_data.load_records('nonconformance')})
@@ -1271,7 +1343,7 @@ def kill_port(port: int) -> None:
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8888))
+    port = int(os.environ.get('PORT', 8887))
     host = os.environ.get('HOST', '127.0.0.1')
     kill_port(port)
     print(f'[server] http://{host}:{port}')
