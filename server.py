@@ -1,14 +1,17 @@
 ﻿from __future__ import annotations
 
+import hashlib
 import json
 import os
 import secrets
 import tempfile
 import time
 import traceback
+from functools import wraps
 from pathlib import Path
 from urllib.parse import urlencode
 
+import jwt as pyjwt
 import requests
 from flask import (
     Flask,
@@ -967,6 +970,98 @@ def api_spc_history():
         "parse_errors":   h.get("parse_errors", []),
     } for h in history]
     return jsonify({"items": summary})
+
+
+# ─── JWT 身份驗證 API ─────────────────────────────────────────────────────────
+
+USERS_PATH = BASE_DIR / "users.json"
+JWT_EXPIRY_HOURS = 12
+
+def _jwt_secret() -> str:
+    return get_or_create_flask_secret()
+
+def _load_users() -> list[dict]:
+    return read_json(USERS_PATH, [])
+
+def _hash_password(pw: str) -> str:
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+def _make_token(user: dict) -> str:
+    payload = {
+        "sub": user["username"],
+        "role": user["role"],
+        "display": user["display"],
+        "exp": time.time() + JWT_EXPIRY_HOURS * 3600,
+    }
+    return pyjwt.encode(payload, _jwt_secret(), algorithm="HS256")
+
+def _decode_token(token: str) -> dict | None:
+    try:
+        return pyjwt.decode(token, _jwt_secret(), algorithms=["HS256"])
+    except pyjwt.ExpiredSignatureError:
+        return None
+    except pyjwt.InvalidTokenError:
+        return None
+
+def require_auth(f):
+    """裝飾器：驗證 JWT，失敗回傳 401。將解碼後的 payload 以 g.user 傳入。"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        from flask import g
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header.removeprefix("Bearer ").strip()
+        if not token:
+            return jsonify({"error": "未登入，請先登入系統"}), 401
+        payload = _decode_token(token)
+        if payload is None:
+            return jsonify({"error": "登入已過期，請重新登入"}), 401
+        g.user = payload
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_auth_login():
+    body = json_body()
+    username = (body.get("username") or "").strip().lower()
+    password = body.get("password") or ""
+    users = _load_users()
+    user = next((u for u in users if u["username"] == username), None)
+    if not user or user["password_hash"] != _hash_password(password):
+        return jsonify({"success": False, "error": "帳號或密碼錯誤"}), 401
+    token = _make_token(user)
+    return jsonify({
+        "success": True,
+        "token": token,
+        "user": {"username": user["username"], "role": user["role"], "display": user["display"]},
+        "expires_in": JWT_EXPIRY_HOURS * 3600,
+    })
+
+@app.route('/api/auth/me', methods=['GET'])
+@require_auth
+def api_auth_me():
+    from flask import g
+    return jsonify({"success": True, "user": {
+        "username": g.user["sub"],
+        "role": g.user["role"],
+        "display": g.user["display"],
+    }})
+
+@app.route('/api/auth/change-password', methods=['POST'])
+@require_auth
+def api_auth_change_password():
+    from flask import g
+    body = json_body()
+    old_pw = body.get("old_password") or ""
+    new_pw = body.get("new_password") or ""
+    if len(new_pw) < 6:
+        return json_error("新密碼至少需要 6 個字元")
+    users = _load_users()
+    user = next((u for u in users if u["username"] == g.user["sub"]), None)
+    if not user or user["password_hash"] != _hash_password(old_pw):
+        return json_error("舊密碼錯誤", 401)
+    user["password_hash"] = _hash_password(new_pw)
+    write_json(USERS_PATH, users)
+    return jsonify({"success": True, "message": "密碼已更新"})
 
 
 def kill_port(port: int) -> None:

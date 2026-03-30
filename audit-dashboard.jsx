@@ -5557,12 +5557,203 @@ function DashboardHome({ instruments, documents, training, equipment, suppliers,
   );
 }
 
+// ─── 角色可見分頁定義 ────────────────────────────────────────────────────────
+const ROLE_TABS = {
+  qms:        ["home","kpi","spc","calibration","documents","library","training","equipment","supplier","nonconformance","auditplan","environment","production","notification","aiworkbench","report"],
+  executive:  ["home","kpi","spc"],
+  supervisor: ["home","kpi","spc","nonconformance","environment","production"],
+  auditor:    ["home","calibration","documents","library","nonconformance","auditplan","report"],
+};
+
+// ─── 登入畫面 ────────────────────────────────────────────────────────────────
+function LoginScreen({ onLogin }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [showPw, setShowPw] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setBusy(true); setError("");
+    try {
+      const resp = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.trim().toLowerCase(), password }),
+      });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || "登入失敗");
+      localStorage.setItem("qms_token", data.token);
+      localStorage.setItem("qms_user", JSON.stringify(data.user));
+      onLogin(data.user);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const accounts = [
+    { role:"品管人員",  user:"qms",   pw:"qms1234"   },
+    { role:"高階主管",  user:"exec",  pw:"exec1234"  },
+    { role:"生產主管",  user:"super", pw:"super1234" },
+    { role:"外部稽核員",user:"audit", pw:"audit1234" },
+  ];
+
+  return (
+    <div style={{ minHeight:"100vh", background:"radial-gradient(circle at top left, rgba(14,165,233,0.08), transparent 26%), linear-gradient(135deg, #08101f 0%, #0b1220 45%, #080d18 100%)", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Noto Sans TC', sans-serif" }}>
+      <div style={{ width:400 }}>
+        {/* Logo */}
+        <div style={{ textAlign:"center", marginBottom:36 }}>
+          <div style={{ fontSize:13, letterSpacing:2, textTransform:"uppercase", color:"#7dd3fc", fontWeight:800, marginBottom:6 }}>Jepei QMS</div>
+          <div style={{ fontSize:22, fontWeight:800, color:"#e2e8f0" }}>潔沛企業有限公司</div>
+          <div style={{ fontSize:13, color:"#64748b", marginTop:4 }}>ISO 9001:2015 品質管理系統</div>
+        </div>
+
+        {/* 登入表單 */}
+        <form onSubmit={handleSubmit} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:16, padding:32 }}>
+          <div style={{ fontSize:16, fontWeight:700, color:"#e2e8f0", marginBottom:24 }}>登入系統</div>
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>帳號</div>
+            <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="請輸入帳號" autoFocus
+              style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:8, padding:"9px 12px", color:"#e2e8f0", fontSize:14, outline:"none", boxSizing:"border-box" }} />
+          </div>
+          <div style={{ marginBottom:24 }}>
+            <div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>密碼</div>
+            <div style={{ position:"relative" }}>
+              <input type={showPw ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="請輸入密碼"
+                style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:8, padding:"9px 40px 9px 12px", color:"#e2e8f0", fontSize:14, outline:"none", boxSizing:"border-box" }} />
+              <button type="button" onClick={() => setShowPw(p => !p)}
+                style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:13, padding:2 }}>
+                {showPw ? "隱藏" : "顯示"}
+              </button>
+            </div>
+          </div>
+          {error && <div style={{ marginBottom:16, padding:"8px 12px", background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, fontSize:13, color:"#fca5a5" }}>{error}</div>}
+          <button type="submit" disabled={busy || !username || !password}
+            style={{ width:"100%", padding:"10px 0", background: busy || !username || !password ? "rgba(255,255,255,0.05)" : "linear-gradient(90deg,#3b82f6,#6366f1)", border:"none", borderRadius:8, color: busy || !username || !password ? "#475569" : "#fff", fontSize:14, fontWeight:700, cursor: busy || !username || !password ? "default" : "pointer" }}>
+            {busy ? "登入中…" : "登入"}
+          </button>
+        </form>
+
+        {/* 預設帳號提示 */}
+        <div style={{ marginTop:20, background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:12, padding:16 }}>
+          <div style={{ fontSize:11, color:"#475569", marginBottom:10, fontWeight:600 }}>預設帳號（初次使用請更改密碼）</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+            {accounts.map(a => (
+              <button key={a.user} type="button"
+                onClick={() => { setUsername(a.user); setPassword(a.pw); }}
+                style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:8, padding:"6px 10px", textAlign:"left", cursor:"pointer" }}>
+                <div style={{ fontSize:11, color:"#94a3b8", fontWeight:600 }}>{a.role}</div>
+                <div style={{ fontSize:10, color:"#475569", marginTop:2 }}>{a.user} / {a.pw}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 更改密碼 Modal ──────────────────────────────────────────────────────────
+function ChangePasswordModal({ token, onClose }) {
+  const [form, setForm] = useState({ old_password:"", new_password:"", confirm:"" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (form.new_password !== form.confirm) { setMsg("兩次新密碼不一致"); return; }
+    if (form.new_password.length < 6) { setMsg("密碼至少 6 個字元"); return; }
+    setBusy(true); setMsg("");
+    try {
+      const resp = await fetch("/api/auth/change-password", {
+        method:"POST",
+        headers: { "Content-Type":"application/json", "Authorization":"Bearer " + token },
+        body: JSON.stringify({ old_password: form.old_password, new_password: form.new_password }),
+      });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || "更新失敗");
+      setMsg("✓ 密碼已更新");
+      setTimeout(onClose, 1200);
+    } catch(err) {
+      setMsg("❌ " + err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:999, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <form onSubmit={handleSubmit} style={{ background:"#0f1929", border:"1px solid rgba(255,255,255,0.12)", borderRadius:14, padding:28, width:340 }}>
+        <div style={{ fontSize:15, fontWeight:700, color:"#e2e8f0", marginBottom:20 }}>更改密碼</div>
+        {["old_password","new_password","confirm"].map(k => (
+          <div key={k} style={{ marginBottom:14 }}>
+            <div style={{ fontSize:11, color:"#64748b", marginBottom:4 }}>
+              {k === "old_password" ? "舊密碼" : k === "new_password" ? "新密碼" : "確認新密碼"}
+            </div>
+            <input type="password" value={form[k]} onChange={e => setForm(p => ({...p, [k]: e.target.value}))}
+              style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:8, padding:"7px 10px", color:"#e2e8f0", fontSize:13, boxSizing:"border-box" }} />
+          </div>
+        ))}
+        {msg && <div style={{ marginBottom:12, fontSize:12, color: msg.startsWith("✓") ? "#22c55e" : "#fca5a5" }}>{msg}</div>}
+        <div style={{ display:"flex", gap:10 }}>
+          <button type="submit" disabled={busy} style={{ flex:1, padding:"8px 0", background:"linear-gradient(90deg,#3b82f6,#6366f1)", border:"none", borderRadius:8, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+            {busy ? "更新中…" : "確認更新"}
+          </button>
+          <button type="button" onClick={onClose} style={{ padding:"8px 16px", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, color:"#94a3b8", fontSize:13, cursor:"pointer" }}>取消</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
 export default function App() {
+  // ── 身份驗證狀態 ──────────────────────────────────────────────
+  const [authUser, setAuthUser] = useState(() => {
+    try {
+      const raw = localStorage.getItem("qms_user");
+      if (!raw) return null;
+      const u = JSON.parse(raw);
+      // 快速驗證 token 仍有效
+      const token = localStorage.getItem("qms_token");
+      if (!token) return null;
+      return u;
+    } catch { return null; }
+  });
+  const [showChangePw, setShowChangePw] = useState(false);
+
+  // 驗證 token 是否仍有效（頁面載入時）
+  useEffect(() => {
+    const token = localStorage.getItem("qms_token");
+    if (!token) { setAuthUser(null); return; }
+    fetch("/api/auth/me", { headers: { Authorization: "Bearer " + token } })
+      .then(r => r.json())
+      .then(d => { if (!d.success) { setAuthUser(null); localStorage.removeItem("qms_token"); localStorage.removeItem("qms_user"); } })
+      .catch(() => {});
+  }, []);
+
+  function handleLogin(user) { setAuthUser(user); }
+  function handleLogout() {
+    localStorage.removeItem("qms_token");
+    localStorage.removeItem("qms_user");
+    setAuthUser(null);
+  }
+
+  // ── 未登入 → 顯示登入畫面 ────────────────────────────────────
+  if (!authUser) return <LoginScreen onLogin={handleLogin} />;
+
+  const userRole = authUser.role || "qms";
+  const allowedTabs = ROLE_TABS[userRole] || ROLE_TABS.qms;
+
+  // ── 主應用狀態 ────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window === "undefined") return "home";
     const params = new URLSearchParams(window.location.search);
-    return params.get("google") ? "notification" : (params.get("tab") || "home");
+    const t = params.get("google") ? "notification" : (params.get("tab") || "home");
+    return allowedTabs.includes(t) ? t : "home";
   });
   const [instruments, setInstruments] = useState(initialInstruments);
   const [documents, setDocuments] = useState(initialDocuments);
@@ -5602,28 +5793,31 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  const tabs = [
-    { id: "home",           label: "主控台",   icon: "⌂" },
-    { id: "kpi",            label: "績效儀表板", icon: "▦" },
-    { id: "spc",            label: "SPC 管制圖", icon: "∿" },
-    { id: "calibration",    label: "校正管理", icon: "◎" },
-    { id: "documents",      label: "文件管理", icon: "≡" },
-    { id: "library",        label: "文件庫",   icon: "📂" },
-    { id: "training",       label: "訓練管理", icon: "□" },
-    { id: "equipment",      label: "設備保養", icon: "⚙" },
-    { id: "supplier",       label: "供應商管理", icon: "◈" },
-    { id: "nonconformance", label: "不符合管理", icon: "⚠" },
-    { id: "auditplan",      label: "稽核計畫", icon: "✓" },
-    { id: "environment",    label: "環境監測", icon: "◉" },
-    { id: "production",     label: "記錄匯出", icon: "R" },
-    { id: "notification",   label: "通知提醒", icon: "✉" },
-    { id: "aiworkbench",    label: "AI 工作台", icon: "AI" },
-    { id: "report",         label: "稽核報告", icon: "☰" },
+  const allTabs = [
+    { id: "home",           label: "主控台",     icon: "⌂" },
+    { id: "kpi",            label: "績效儀表板",  icon: "▦" },
+    { id: "spc",            label: "SPC 管制圖",  icon: "∿" },
+    { id: "calibration",    label: "校正管理",   icon: "◎" },
+    { id: "documents",      label: "文件管理",   icon: "≡" },
+    { id: "library",        label: "文件庫",     icon: "📂" },
+    { id: "training",       label: "訓練管理",   icon: "□" },
+    { id: "equipment",      label: "設備保養",   icon: "⚙" },
+    { id: "supplier",       label: "供應商管理",  icon: "◈" },
+    { id: "nonconformance", label: "不符合管理",  icon: "⚠" },
+    { id: "auditplan",      label: "稽核計畫",   icon: "✓" },
+    { id: "environment",    label: "環境監測",   icon: "◉" },
+    { id: "production",     label: "記錄匯出",   icon: "R" },
+    { id: "notification",   label: "通知提醒",   icon: "✉" },
+    { id: "aiworkbench",    label: "AI 工作台",  icon: "AI" },
+    { id: "report",         label: "稽核報告",   icon: "☰" },
   ];
+  const tabs = allTabs.filter(t => allowedTabs.includes(t.id));
+
+  function setTabSafe(id) { if (allowedTabs.includes(id)) setActiveTab(id); }
 
   function renderTab() {
     switch(activeTab) {
-      case "home":           return <DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setActiveTab} />;
+      case "home":           return <DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setTabSafe} />;
       case "kpi":            return <KpiDashboard instruments={instruments} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} prodRecords={prodRecords} qualityRecords={qualityRecords} />;
       case "spc":            return <SpcTab prodRecords={prodRecords} />;
       case "calibration":    return <CalibrationTab instruments={instruments} setInstruments={setInstruments} />;
@@ -5635,46 +5829,57 @@ export default function App() {
       case "nonconformance": return <NonConformanceTab nonConformances={nonConformances} setNonConformances={setNonConformances} highlightNcId={highlightNcId} onHighlightDone={() => setHighlightNcId(null)} expandNcId={expandNcId} onExpandDone={() => setExpandNcId(null)} />;
       case "auditplan":      return <AuditPlanTab auditPlans={auditPlans} setAuditPlans={setAuditPlans} />;
       case "environment":    return <EnvironmentTab envRecords={envRecords} setEnvRecords={setEnvRecords} />;
-    case "production":     return <PageErrorBoundary pageName="????" storageKeys={["audit_prodrecords", "audit_qualityrecords"]}><ProductionTab envRecords={envRecords} prodRecords={prodRecords} setProdRecords={setProdRecords} qualityRecords={qualityRecords} setQualityRecords={setQualityRecords} nonConformances={nonConformances} auditPlans={auditPlans} setActiveTab={setActiveTab} setHighlightNcId={setHighlightNcId} setExpandNcId={setExpandNcId} /></PageErrorBoundary>;
+      case "production":     return <PageErrorBoundary pageName="記錄匯出" storageKeys={["audit_prodrecords", "audit_qualityrecords"]}><ProductionTab envRecords={envRecords} prodRecords={prodRecords} setProdRecords={setProdRecords} qualityRecords={qualityRecords} setQualityRecords={setQualityRecords} nonConformances={nonConformances} auditPlans={auditPlans} setActiveTab={setTabSafe} setHighlightNcId={setHighlightNcId} setExpandNcId={setExpandNcId} /></PageErrorBoundary>;
       case "notification":   return <NotificationTab instruments={instruments} documents={documents} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} />;
       case "aiworkbench":    return <AIWorkbenchTab documents={documents} manuals={manuals} nonConformances={nonConformances} />;
       case "report":         return <ReportTab instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} />;
-      default:               return <DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setActiveTab} />;
+      default:               return <DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setTabSafe} />;
     }
   }
 
+  const roleColors = { qms:"#3b82f6", executive:"#8b5cf6", supervisor:"#f59e0b", auditor:"#22c55e" };
+  const roleColor = roleColors[userRole] || "#64748b";
+
   return (
-    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at top left, rgba(14,165,233,0.08), transparent 26%), linear-gradient(135deg, #08101f 0%, #0b1220 45%, #080d18 100%)", color: "#e2e8f0", fontFamily: "'Noto Sans TC', sans-serif" }}>
-      <div style={{ position: "sticky", top: 0, zIndex: 20, background: "rgba(8,15,30,0.88)", borderBottom: "1px solid rgba(148,163,184,0.12)", backdropFilter: "blur(16px)", padding: "0 24px", boxShadow: "0 10px 30px rgba(2,6,23,0.18)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 18, overflowX: "auto" }}>
-          <div style={{ padding: "14px 0", minWidth: 170 }}>
-            <div style={{ fontSize: 11, letterSpacing: 1.4, textTransform: "uppercase", color: "#7dd3fc", fontWeight: 800 }}>Jepei QMS</div>
-            <div style={{ fontSize: 15, color: "#e2e8f0", fontWeight: 800, marginTop: 4 }}>品質稽核工作台</div>
+    <div style={{ minHeight:"100vh", background:"radial-gradient(circle at top left, rgba(14,165,233,0.08), transparent 26%), linear-gradient(135deg, #08101f 0%, #0b1220 45%, #080d18 100%)", color:"#e2e8f0", fontFamily:"'Noto Sans TC', sans-serif" }}>
+      {showChangePw && <ChangePasswordModal token={localStorage.getItem("qms_token")} onClose={() => setShowChangePw(false)} />}
+      <div style={{ position:"sticky", top:0, zIndex:20, background:"rgba(8,15,30,0.88)", borderBottom:"1px solid rgba(148,163,184,0.12)", backdropFilter:"blur(16px)", padding:"0 24px", boxShadow:"0 10px 30px rgba(2,6,23,0.18)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:18, overflowX:"auto" }}>
+          <div style={{ padding:"14px 0", minWidth:170, flexShrink:0 }}>
+            <div style={{ fontSize:11, letterSpacing:1.4, textTransform:"uppercase", color:"#7dd3fc", fontWeight:800 }}>Jepei QMS</div>
+            <div style={{ fontSize:15, color:"#e2e8f0", fontWeight:800, marginTop:4 }}>品質稽核工作台</div>
           </div>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
               background: activeTab === t.id ? "rgba(56,189,248,0.14)" : "transparent",
               border: activeTab === t.id ? "1px solid rgba(56,189,248,0.28)" : "1px solid transparent",
-              cursor: "pointer",
-              padding: "10px 14px",
-              fontSize: 12,
-              fontWeight: 700,
+              cursor:"pointer", padding:"10px 14px", fontSize:12, fontWeight:700,
               color: activeTab === t.id ? "#dbeafe" : "#94a3b8",
-              borderRadius: 12,
-              whiteSpace: "nowrap",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              transition: "all 0.2s ease",
-              margin: "10px 0",
+              borderRadius:12, whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:8,
+              transition:"all 0.2s ease", margin:"10px 0",
             }}>
-              <span style={{ fontSize: 12, minWidth: 24, height: 24, display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 999, background: activeTab === t.id ? "rgba(59,130,246,0.18)" : "rgba(255,255,255,0.06)" }}>{t.icon}</span>
+              <span style={{ fontSize:12, minWidth:24, height:24, display:"inline-flex", alignItems:"center", justifyContent:"center", borderRadius:999, background: activeTab === t.id ? "rgba(59,130,246,0.18)" : "rgba(255,255,255,0.06)" }}>{t.icon}</span>
               <span>{t.label}</span>
             </button>
           ))}
+          {/* 使用者資訊 + 登出 */}
+          <div style={{ marginLeft:"auto", flexShrink:0, display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 12px", background:"rgba(255,255,255,0.04)", border:`1px solid ${roleColor}30`, borderRadius:10 }}>
+              <div style={{ width:7, height:7, borderRadius:"50%", background:roleColor }} />
+              <div style={{ fontSize:12, color:"#94a3b8" }}>{authUser.display}</div>
+            </div>
+            <button onClick={() => setShowChangePw(true)}
+              style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, padding:"6px 10px", fontSize:11, color:"#64748b", cursor:"pointer" }}>
+              改密碼
+            </button>
+            <button onClick={handleLogout}
+              style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)", borderRadius:8, padding:"6px 12px", fontSize:12, fontWeight:600, color:"#fca5a5", cursor:"pointer" }}>
+              登出
+            </button>
+          </div>
         </div>
       </div>
-      <div style={{ maxWidth: 1460, margin: "0 auto", padding: "28px 24px 40px" }}>
+      <div style={{ maxWidth:1460, margin:"0 auto", padding:"28px 24px 40px" }}>
         {renderTab()}
       </div>
     </div>
