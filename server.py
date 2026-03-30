@@ -1343,7 +1343,7 @@ def kill_port(port: int) -> None:
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8888))
+    port = int(os.environ.get('PORT', 8887))
     host = os.environ.get('HOST', '127.0.0.1')
     kill_port(port)
     print(f'[server] http://{host}:{port}')

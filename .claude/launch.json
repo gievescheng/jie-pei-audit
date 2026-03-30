@@ -5,7 +5,7 @@
       "name": "audit-dashboard",
       "runtimeExecutable": "python",
       "runtimeArgs": ["server.py"],
-      "port": 8888
+      "port": 8887
     }
   ]
 }
