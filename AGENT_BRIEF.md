@@ -1,77 +1,188 @@
-# JEPE Audit System Refactor Brief
+# AGENT_BRIEF.md
+
+## Project
+JEPE Audit / QMS / ERP backend refactor
 
 ## Mission
-Refactor this repository into a maintainable backend-first QMS/ERP system foundation without breaking current business direction.
+Refactor this repository into a maintainable, backend-first QMS / ERP foundation for internal factory quality operations, while preserving current business direction and minimizing unnecessary back-and-forth.
 
-## Current situation
-- The repository mixes controlled QMS documents and application source code.
-- Backend is currently FastAPI + SQLAlchemy.
-- API routes are concentrated in one file.
-- ORM models are concentrated in one file.
-- Tests currently focus on smoke coverage and call Python API functions directly.
-- The goal is not to redesign the business domain from scratch, but to create a clean execution foundation.
+---
 
-## Primary goal
-Create a production-oriented backend structure that is:
+## Current repository reality
+
+This repository currently contains two different kinds of assets:
+
+1. **Archival / controlled QMS documents**
+   - Quality manual
+   - Procedures
+   - Forms
+   - Records
+   - Excel / Word / PDF operational materials
+
+2. **Application source code**
+   - Python backend
+   - FastAPI
+   - SQLAlchemy
+   - Tests
+   - Supporting utilities
+
+The current backend is functional as an internal MVP, but the codebase is still at an early structure stage:
+- route logic is too concentrated
+- model definitions are too concentrated
+- business rules are too thin
+- test strategy is still early-stage
+- the project is not yet ready for long-term scaling
+
+The goal is **not** to redesign the business from zero.
+The goal is to create a **clean execution foundation**.
+
+---
+
+## Primary objective
+
+Transform the backend into a production-oriented structure that is:
+
 - modular
 - testable
 - migration-friendly
-- ready for auth/RBAC/audit/workflow
+- ready for auth / RBAC / audit / approval workflow
 - ready for future frontend integration
+- maintainable by a new engineer without needing project history in their head
 
-## Hard constraints
-- Do not delete historical QMS document folders.
-- Do not rename or move QMS document folders in a way that breaks their archival meaning.
-- Do not remove current working endpoints unless replaced with backward-compatible equivalents.
-- Prefer incremental refactor over big-bang rewrite.
-- Preserve business terms aligned to QMS / ERP / audit workflows.
-- Avoid introducing unnecessary frameworks.
+---
 
-## Refactor priorities
-1. Restructure backend package layout.
-2. Separate route layer, service layer, repository/data-access layer, schema layer, and model layer.
-3. Add API versioning.
-4. Standardize error response and request tracing.
-5. Introduce status enums and transition guards.
-6. Prepare auth/RBAC extension points.
-7. Replace direct schema creation dependency with migration-ready structure.
-8. Upgrade test strategy:
-   - unit tests
-   - API integration tests
-   - workflow tests
-9. Add CI-ready quality gates.
-10. Keep the repo usable at every stage.
+## Absolute constraints
 
-## Non-goals for this phase
-- Full frontend implementation
-- Full document management module
-- Full approval engine
-- Full notification engine
-- Full production scheduling engine
+### Must preserve
+- Historical QMS document folders and their archival meaning
+- Existing backend business direction
+- Existing covered flows unless safely replaced
+- Business vocabulary aligned to QMS / ERP / audit workflows
 
-## Expected deliverables
-- New backend folder architecture
-- Refactored API modules
-- Shared error/response utilities
-- Domain enums and workflow/status guards
-- Initial service layer
-- Initial repository layer
-- Migration scaffold
-- Test scaffold with FastAPI TestClient
-- Developer docs for local run/test/lint/migrate
-- Upgrade plan for auth/audit/frontend phase
+### Must not do
+- Do not perform a big-bang rewrite
+- Do not aggressively move or rename archival document folders
+- Do not delete working behavior without replacement
+- Do not replace FastAPI
+- Do not replace SQLAlchemy
+- Do not introduce microservices
+- Do not add unnecessary frameworks
+- Do not ask repeated broad clarification questions unless truly blocked
 
-## Required output style
-When executing:
-- Make changes in small, reviewable commits
-- Explain rationale in code comments only when valuable
-- Update docs as you go
-- Do not ask broad open-ended questions unless blocked by a hard ambiguity
-- If blocked, make the safest assumption and continue, while documenting the assumption
+### Assumption rule
+If ambiguity is not blocking, make the safest reasonable assumption, document it, and continue.
 
-## Definition of done
-The refactor is done when:
-- backend structure is modular
-- current covered flows still work
-- tests run consistently
-- future modules can be added without returning to a giant single-file API design
+---
+
+## Refactor goals
+
+### Goal 1: backend modularization
+Replace the current oversized module style with a maintainable layered structure.
+
+### Goal 2: clear architectural separation
+Separate:
+- API layer
+- service layer
+- repository / data access layer
+- schema layer
+- model layer
+- shared core utilities
+- domain rules / enums / transitions
+
+### Goal 3: future-readiness
+Prepare extension points for:
+- authentication
+- role-based access control
+- audit logging
+- approval workflow
+- notifications
+- frontend integration
+- document control module
+
+### Goal 4: quality and delivery discipline
+Ensure the project can be:
+- tested
+- migrated
+- reviewed
+- extended without collapsing back into a single giant file design
+
+---
+
+## Required target architecture
+
+Use this as the intended structure unless a slightly different equivalent structure is clearly better.
+
+```text
+erp_qms_core/
+  backend/
+    app/
+      main.py
+      api/
+        v1/
+          router.py
+          health.py
+          customers.py
+          suppliers.py
+          products.py
+          bom.py
+          orders.py
+          inventory.py
+          shipments.py
+      core/
+        config.py
+        db.py
+        errors.py
+        logging.py
+        responses.py
+        request_context.py
+        security.py
+      domain/
+        enums.py
+        transitions.py
+        rules.py
+      models/
+        __init__.py
+        base.py
+        master.py
+        orders.py
+        inventory.py
+        audit.py
+      repositories/
+        __init__.py
+        customers.py
+        suppliers.py
+        products.py
+        bom.py
+        orders.py
+        inventory.py
+        shipments.py
+      schemas/
+        __init__.py
+        common.py
+        customers.py
+        suppliers.py
+        products.py
+        bom.py
+        orders.py
+        inventory.py
+        shipments.py
+      services/
+        __init__.py
+        customers.py
+        suppliers.py
+        products.py
+        bom.py
+        sales_orders.py
+        work_orders.py
+        inventory.py
+        shipments.py
+        audit.py
+    tests/
+      unit/
+      integration/
+      workflows/
+    migrations/
+    README.md
+    requirements.txt
+    requirements-dev.txt
+    alembic.ini
