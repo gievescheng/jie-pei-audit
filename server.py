@@ -1,14 +1,17 @@
 ﻿from __future__ import annotations
 
+import hashlib
 import json
 import os
 import secrets
 import tempfile
 import time
 import traceback
+from functools import wraps
 from pathlib import Path
 from urllib.parse import urlencode
 
+import jwt as pyjwt
 import requests
 from flask import (
     Flask,
@@ -850,6 +853,394 @@ def google_calendar_events():
 def google_calendar_logout():
     clear_google_tokens()
     return jsonify(google_status_payload())
+
+
+# ─── SPC 統計製程管制 API ────────────────────────────────────────────────────
+
+@app.route('/api/spc/analyze', methods=['POST'])
+def api_spc_analyze():
+    """
+    接收 CSV 晶圓量測資料，呼叫 spc_engine 計算 I-MR 管制圖與 Cpk。
+    Body（JSON）：
+      {
+        "batch_id": "LOT-20260301-A",
+        "thickness": [702.1, 701.3, ...],
+        "ttv":       [0.28, 0.19, ...],
+        "particle_lots": [{"lot_id":"L001","n":600,"defects":3}, ...],  // 選填
+        "spec": {
+          "thickness_usl": 705.0, "thickness_lsl": 695.0,
+          "ttv_usl": 2.0,         "ttv_lsl": 0.0
+        }
+      }
+    或直接上傳 CSV 檔（multipart/form-data，欄位名 csv_file）。
+    """
+    try:
+        from spc_engine import run_all_charts
+    except ImportError:
+        return json_error("spc_engine 模組未安裝，請確認 numpy/scipy 已安裝", 500)
+
+    # ── CSV 上傳模式 ──────────────────────────────────────────
+    raw_rows = []   # 原始量測列（含 Wafer ID），供 FOSB 報表使用
+
+    if request.files.get("csv_file"):
+        import csv, io
+        f = request.files["csv_file"]
+        spec_raw = request.form.get("spec", "{}")
+        batch_id = request.form.get("batch_id", f.filename.rsplit(".", 1)[0])
+        try:
+            spec = json.loads(spec_raw)
+        except Exception:
+            spec = {}
+
+        # 一次讀取所有內容，避免 stream 被消耗
+        content = f.read().decode("utf-8-sig", errors="replace")
+        reader = csv.DictReader(io.StringIO(content))
+        csv_rows = list(reader)
+
+        thickness, ttv, errors = [], [], []
+        for i, row in enumerate(csv_rows, 1):
+            wid   = (row.get("Wafer ID") or row.get("wafer_id") or row.get("slot") or "").strip()
+            t_raw = row.get("Thickness Avg(um)", row.get("thickness", "") or "").strip()
+            v_raw = row.get("TTV(um)",            row.get("ttv",       "") or "").strip()
+            p_raw = row.get("Particle Count",     row.get("particle",  "") or "").strip()
+            t_val = v_val = p_val = None
+            try:
+                if t_raw and t_raw not in ("N/A", "--"):
+                    t_val = float(t_raw)
+                    thickness.append(t_val)
+            except ValueError as e:
+                errors.append(f"第 {i} 行 Thickness 格式錯誤：{e}")
+            try:
+                if v_raw and v_raw not in ("N/A", "--"):
+                    v_val = float(v_raw)
+                    ttv.append(v_val)
+            except ValueError:
+                pass
+            try:
+                if p_raw and p_raw not in ("N/A", "--"):
+                    p_val = int(float(p_raw))
+            except ValueError:
+                pass
+            raw_rows.append({"wafer_id": wid, "thickness": t_val, "ttv": v_val, "particle": p_val})
+
+        if not thickness and not ttv:
+            return json_error("CSV 中找不到有效的 Thickness 或 TTV 資料，請確認欄位名稱", 400)
+        particle_lots = []
+
+    # ── JSON 模式 ─────────────────────────────────────────────
+    else:
+        body = json_body()
+        batch_id = body.get("batch_id", "未命名批次")
+        thickness = [float(v) for v in body.get("thickness", [])]
+        ttv       = [float(v) for v in body.get("ttv", [])]
+        spec      = body.get("spec", {})
+        errors    = []
+        particle_lots = body.get("particle_lots", [])
+
+    spec.setdefault("thickness_usl", 705.0)
+    spec.setdefault("thickness_lsl", 695.0)
+    spec.setdefault("ttv_usl", 2.0)
+    spec.setdefault("ttv_lsl", 0.0)
+
+    try:
+        result = run_all_charts(thickness, ttv, particle_lots, spec)
+    except Exception as e:
+        return json_error(f"SPC 計算失敗：{e}", 500)
+
+    # 存入本地歷史（簡易 JSON 檔）
+    history_path = BASE_DIR / "spc_history.json"
+    history = read_json(history_path, [])
+    import datetime
+    entry = {
+        "batch_id": batch_id,
+        "analyzed_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "spec": spec,
+        "thickness_n": len(thickness),
+        "ttv_n": len(ttv),
+        "thickness_cpk": result["summary"].get("thickness_cpk"),
+        "ttv_cpk": result["summary"].get("ttv_cpk"),
+        "needs_attention": result["summary"].get("needs_attention", False),
+        "result": result,
+        "parse_errors": errors,
+        "raw_rows": raw_rows,   # 原始量測資料，供 FOSB 報表使用
+    }
+    history.insert(0, entry)
+    write_json(history_path, history[:50])  # 保留最近 50 筆
+
+    return jsonify({"success": True, "batch_id": batch_id, "result": result,
+                    "parse_errors": errors})
+
+
+@app.route('/api/spc/history', methods=['GET'])
+def api_spc_history():
+    """回傳最近 50 筆 SPC 分析記錄（不含完整 result，僅摘要）"""
+    history_path = BASE_DIR / "spc_history.json"
+    history = read_json(history_path, [])
+    summary = [{
+        "batch_id":       h.get("batch_id"),
+        "analyzed_at":    h.get("analyzed_at"),
+        "thickness_cpk":  h.get("thickness_cpk"),
+        "ttv_cpk":        h.get("ttv_cpk"),
+        "thickness_n":    h.get("thickness_n"),
+        "ttv_n":          h.get("ttv_n"),
+        "needs_attention": h.get("needs_attention", False),
+        "parse_errors":   h.get("parse_errors", []),
+        "has_raw_rows":   len(h.get("raw_rows", [])) > 0,
+    } for h in history]
+    return jsonify({"items": summary})
+
+
+@app.route('/api/spc/fosb', methods=['GET'])
+def api_spc_fosb():
+    """
+    產生 FOSB 客戶報表 Excel。
+    Query param: batch_id
+    FOSB 格式：最多 6 個 FOSB，每個約 74 wafer，
+    欄位固定：wafer_id(C,I,O,U,AA,AG)，thickness(E,K,Q,W,AC,AI)，ttv(F,L,R,X,AD,AJ)
+    """
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter, column_index_from_string
+
+    batch_id = request.args.get("batch_id", "")
+    history_path = BASE_DIR / "spc_history.json"
+    history = read_json(history_path, [])
+    entry = next((h for h in history if h.get("batch_id") == batch_id), None)
+    if not entry:
+        return json_error(f"找不到批次 '{batch_id}'，請先上傳分析", 404)
+    raw_rows = entry.get("raw_rows", [])
+    if not raw_rows:
+        return json_error("此批次無原始量測資料，請重新上傳 CSV 後再產生報表", 400)
+
+    spec = entry.get("spec", {})
+    t_usl = spec.get("thickness_usl", 705.0)
+    t_lsl = spec.get("thickness_lsl", 695.0)
+    v_usl = spec.get("ttv_usl", 2.0)
+
+    # FOSB 欄位對應
+    FOSB_MAP = [
+        {"wafer_id": "C",  "thickness": "E",  "ttv": "F"},
+        {"wafer_id": "I",  "thickness": "K",  "ttv": "L"},
+        {"wafer_id": "O",  "thickness": "Q",  "ttv": "R"},
+        {"wafer_id": "U",  "thickness": "W",  "ttv": "X"},
+        {"wafer_id": "AA", "thickness": "AC", "ttv": "AD"},
+        {"wafer_id": "AG", "thickness": "AI", "ttv": "AJ"},
+    ]
+    DATA_START_ROW = 5
+    WAFERS_PER_FOSB = 74
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "FOSB量測報表"
+
+    # ── 樣式定義 ──
+    hdr_font  = Font(bold=True, size=10, color="FFFFFF")
+    hdr_fill  = PatternFill("solid", fgColor="1E3A5F")
+    rej_fill  = PatternFill("solid", fgColor="FFCCCC")
+    ok_fill   = PatternFill("solid", fgColor="E6F4EA")
+    thin_side = Side(style="thin", color="AAAAAA")
+    thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+    center    = Alignment(horizontal="center", vertical="center")
+
+    # ── 第 1 行：報表標題 ──
+    ws.merge_cells("A1:AJ1")
+    ws["A1"] = f"潔沛企業有限公司 — FOSB 晶圓量測報表  批次：{batch_id}  產出：{entry.get('analyzed_at','')}"
+    ws["A1"].font = Font(bold=True, size=12)
+    ws["A1"].fill = PatternFill("solid", fgColor="0A1628")
+    ws["A1"].font = Font(bold=True, size=12, color="7DD3FC")
+    ws["A1"].alignment = center
+    ws.row_dimensions[1].height = 22
+
+    # ── 第 2 行：SPC 摘要（獨立行，不與 FOSB 標頭衝突）──
+    ws["A2"] = "Thickness Cpk:"
+    ws["B2"] = entry.get("thickness_cpk") or "–"
+    ws["D2"] = "TTV Cpk:"
+    ws["E2"] = entry.get("ttv_cpk") or "–"
+    ws["G2"] = f"Thickness USL/LSL: {t_usl}/{t_lsl} μm"
+    ws["L2"] = f"TTV USL: {v_usl} μm"
+    for cell_ref in ["A2","D2","G2","L2"]:
+        ws[cell_ref].font = Font(bold=True, size=9, color="94A3B8")
+    for cell_ref in ["B2","E2"]:
+        v = ws[cell_ref].value
+        try:
+            color = "22C55E" if float(v) >= 1.33 else ("F59E0B" if float(v) >= 1.00 else "EF4444")
+        except (TypeError, ValueError):
+            color = "64748B"
+        ws[cell_ref].font = Font(bold=True, size=11, color=color)
+    ws.row_dimensions[2].height = 18
+
+    # ── 第 3 行：FOSB 群組標頭 ──
+    for fosb_i, cols in enumerate(FOSB_MAP):
+        header_col_idx = column_index_from_string(cols["wafer_id"])
+        ttv_col_idx = column_index_from_string(cols["ttv"])
+        ws.merge_cells(start_row=3, start_column=header_col_idx, end_row=3, end_column=ttv_col_idx)
+        c = ws.cell(row=3, column=header_col_idx)
+        c.value = f"FOSB {fosb_i + 1}"
+        c.font = hdr_font
+        c.fill = hdr_fill
+        c.alignment = center
+    ws.row_dimensions[3].height = 18
+
+    # ── 第 4 行：欄位子標頭 ──
+    for fosb_i, cols in enumerate(FOSB_MAP):
+        for sub_label, col_letter in [("Wafer ID", cols["wafer_id"]),
+                                       ("Thickness (μm)", cols["thickness"]),
+                                       ("TTV (μm)", cols["ttv"])]:
+            c = column_index_from_string(col_letter)
+            cell = ws.cell(row=4, column=c)
+            cell.value = sub_label
+            cell.font = Font(bold=True, size=9, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="2D5A8E")
+            cell.alignment = center
+            cell.border = thin_border
+    ws.row_dimensions[4].height = 18
+
+    # ── 資料列 ──
+    for fosb_i, cols in enumerate(FOSB_MAP):
+        start = fosb_i * WAFERS_PER_FOSB
+        chunk = raw_rows[start: start + WAFERS_PER_FOSB]
+        for row_i, row in enumerate(chunk):
+            excel_row = DATA_START_ROW + row_i
+            t_val = row.get("thickness")
+            v_val = row.get("ttv")
+
+            # Wafer ID
+            wid_col = column_index_from_string(cols["wafer_id"])
+            ws.cell(row=excel_row, column=wid_col).value = row.get("wafer_id", "")
+            ws.cell(row=excel_row, column=wid_col).font = Font(size=9)
+            ws.cell(row=excel_row, column=wid_col).border = thin_border
+
+            # Thickness
+            t_col = column_index_from_string(cols["thickness"])
+            t_cell = ws.cell(row=excel_row, column=t_col)
+            t_cell.value = round(t_val, 4) if t_val is not None else ""
+            t_cell.number_format = "0.000"
+            t_cell.font = Font(size=9)
+            t_cell.border = thin_border
+            if t_val is not None:
+                t_oos = not (t_lsl <= t_val <= t_usl)
+                t_cell.fill = rej_fill if t_oos else ok_fill
+
+            # TTV
+            v_col = column_index_from_string(cols["ttv"])
+            v_cell = ws.cell(row=excel_row, column=v_col)
+            v_cell.value = round(v_val, 4) if v_val is not None else ""
+            v_cell.number_format = "0.000"
+            v_cell.font = Font(size=9)
+            v_cell.border = thin_border
+            if v_val is not None:
+                v_oos = not (0 <= v_val <= v_usl)
+                v_cell.fill = rej_fill if v_oos else ok_fill
+
+    # ── 欄寬 ──
+    for cols in FOSB_MAP:
+        ws.column_dimensions[cols["wafer_id"]].width = 15
+        ws.column_dimensions[cols["thickness"]].width = 13
+        ws.column_dimensions[cols["ttv"]].width = 10
+
+    # ── 凍結標頭 ──
+    ws.freeze_panes = f"A{DATA_START_ROW}"
+
+    buf = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+    wb.save(buf.name)
+    buf.close()
+
+    safe_batch = "".join(c if c.isalnum() or c in "-_." else "_" for c in batch_id)
+    filename = f"FOSB_{safe_batch}.xlsx"
+    return send_file(buf.name, as_attachment=True, download_name=filename,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# ─── JWT 身份驗證 API ─────────────────────────────────────────────────────────
+
+USERS_PATH = BASE_DIR / "users.json"
+JWT_EXPIRY_HOURS = 12
+
+def _jwt_secret() -> str:
+    return get_or_create_flask_secret()
+
+def _load_users() -> list[dict]:
+    return read_json(USERS_PATH, [])
+
+def _hash_password(pw: str) -> str:
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+def _make_token(user: dict) -> str:
+    payload = {
+        "sub": user["username"],
+        "role": user["role"],
+        "display": user["display"],
+        "exp": time.time() + JWT_EXPIRY_HOURS * 3600,
+    }
+    return pyjwt.encode(payload, _jwt_secret(), algorithm="HS256")
+
+def _decode_token(token: str) -> dict | None:
+    try:
+        return pyjwt.decode(token, _jwt_secret(), algorithms=["HS256"])
+    except pyjwt.ExpiredSignatureError:
+        return None
+    except pyjwt.InvalidTokenError:
+        return None
+
+def require_auth(f):
+    """裝飾器：驗證 JWT，失敗回傳 401。將解碼後的 payload 以 g.user 傳入。"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        from flask import g
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header.removeprefix("Bearer ").strip()
+        if not token:
+            return jsonify({"error": "未登入，請先登入系統"}), 401
+        payload = _decode_token(token)
+        if payload is None:
+            return jsonify({"error": "登入已過期，請重新登入"}), 401
+        g.user = payload
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_auth_login():
+    body = json_body()
+    username = (body.get("username") or "").strip().lower()
+    password = body.get("password") or ""
+    users = _load_users()
+    user = next((u for u in users if u["username"] == username), None)
+    if not user or user["password_hash"] != _hash_password(password):
+        return jsonify({"success": False, "error": "帳號或密碼錯誤"}), 401
+    token = _make_token(user)
+    return jsonify({
+        "success": True,
+        "token": token,
+        "user": {"username": user["username"], "role": user["role"], "display": user["display"]},
+        "expires_in": JWT_EXPIRY_HOURS * 3600,
+    })
+
+@app.route('/api/auth/me', methods=['GET'])
+@require_auth
+def api_auth_me():
+    from flask import g
+    return jsonify({"success": True, "user": {
+        "username": g.user["sub"],
+        "role": g.user["role"],
+        "display": g.user["display"],
+    }})
+
+@app.route('/api/auth/change-password', methods=['POST'])
+@require_auth
+def api_auth_change_password():
+    from flask import g
+    body = json_body()
+    old_pw = body.get("old_password") or ""
+    new_pw = body.get("new_password") or ""
+    if len(new_pw) < 6:
+        return json_error("新密碼至少需要 6 個字元")
+    users = _load_users()
+    user = next((u for u in users if u["username"] == g.user["sub"]), None)
+    if not user or user["password_hash"] != _hash_password(old_pw):
+        return json_error("舊密碼錯誤", 401)
+    user["password_hash"] = _hash_password(new_pw)
+    write_json(USERS_PATH, users)
+    return jsonify({"success": True, "message": "密碼已更新"})
 
 
 def kill_port(port: int) -> None:

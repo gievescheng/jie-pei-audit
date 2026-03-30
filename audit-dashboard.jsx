@@ -570,15 +570,53 @@ function collectNotificationItems({ instruments, documents, equipment, suppliers
 }
 
 // ─── SHARED COMPONENTS ────────────────────────────────────────────────────────
-const uiTheme = {
+const DARK_THEME = {
+  isDark: true,
   panel: "linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(15,23,42,0.78) 100%)",
+  panelSolid: "#0f172a",
   panelSoft: "rgba(255,255,255,0.035)",
   panelBorder: "rgba(148,163,184,0.16)",
   text: "#e2e8f0",
   textMuted: "#94a3b8",
   textSoft: "#64748b",
   shadow: "0 24px 60px rgba(2, 6, 23, 0.28)",
+  navBg: "rgba(8,15,30,0.88)",
+  rootBg: "radial-gradient(circle at top left, rgba(14,165,233,0.08), transparent 26%), linear-gradient(135deg, #08101f 0%, #0b1220 45%, #080d18 100%)",
+  rootColor: "#e2e8f0",
+  inputBg: "rgba(255,255,255,0.05)",
+  inputBorder: "rgba(148,163,184,0.18)",
+  inputColor: "#e2e8f0",
+  modalBg: "#162033",
+  modalBorder: "rgba(148,163,184,0.18)",
 };
+
+const LIGHT_THEME = {
+  isDark: false,
+  panel: "linear-gradient(180deg, rgba(255,255,255,0.97) 0%, rgba(248,250,252,0.92) 100%)",
+  panelSolid: "#ffffff",
+  panelSoft: "rgba(0,0,0,0.025)",
+  panelBorder: "rgba(15,23,42,0.1)",
+  text: "#0f172a",
+  textMuted: "#475569",
+  textSoft: "#94a3b8",
+  shadow: "0 24px 60px rgba(15, 23, 42, 0.08)",
+  navBg: "rgba(248,250,252,0.92)",
+  rootBg: "radial-gradient(circle at top left, rgba(14,165,233,0.05), transparent 26%), linear-gradient(135deg, #f1f5f9 0%, #f8fafc 45%, #e8f0fe 100%)",
+  rootColor: "#0f172a",
+  inputBg: "rgba(15,23,42,0.04)",
+  inputBorder: "rgba(15,23,42,0.14)",
+  inputColor: "#0f172a",
+  modalBg: "#ffffff",
+  modalBorder: "rgba(15,23,42,0.12)",
+};
+
+const ThemeContext = React.createContext(DARK_THEME);
+
+// 便利 hook：任何元件皆可取用目前主題
+function useTheme() { return React.useContext(ThemeContext); }
+
+// 向下相容：若元件直接參照 uiTheme，改用此 proxy（請逐步遷移到 useTheme()）
+const uiTheme = DARK_THEME; // 僅供靜態參照用，動態元件應使用 useTheme()
 
 function buttonStyle(variant = "secondary", disabled = false) {
   const map = {
@@ -648,20 +686,23 @@ const tableRowCellStyle = {
 };
 
 function PageIntro({ eyebrow, title, description, actions, children }) {
+  const th = useTheme();
   return (
     <div style={{
-      background: "linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.72) 100%)",
-      border: "1px solid rgba(148,163,184,0.16)",
+      background: th.isDark
+        ? "linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.72) 100%)"
+        : "linear-gradient(180deg, rgba(255,255,255,0.97) 0%, rgba(241,245,249,0.88) 100%)",
+      border: "1px solid " + th.panelBorder,
       borderRadius: 20,
       padding: 24,
       marginBottom: 20,
-      boxShadow: uiTheme.shadow,
+      boxShadow: th.shadow,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ minWidth: 280, flex: 1 }}>
-          {eyebrow && <div style={{ fontSize: 11, letterSpacing: 1.4, textTransform: "uppercase", color: "#7dd3fc", fontWeight: 800, marginBottom: 10 }}>{eyebrow}</div>}
-          <div style={{ fontSize: 28, lineHeight: 1.1, fontWeight: 800, color: uiTheme.text }}>{title}</div>
-          {description && <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.8, color: uiTheme.textMuted, maxWidth: 760 }}>{description}</div>}
+          {eyebrow && <div style={{ fontSize: 11, letterSpacing: 1.4, textTransform: "uppercase", color: th.isDark ? "#7dd3fc" : "#0284c7", fontWeight: 800, marginBottom: 10 }}>{eyebrow}</div>}
+          <div style={{ fontSize: 28, lineHeight: 1.1, fontWeight: 800, color: th.text }}>{title}</div>
+          {description && <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.8, color: th.textMuted, maxWidth: 760 }}>{description}</div>}
         </div>
         {actions && <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>{actions}</div>}
       </div>
@@ -671,22 +712,23 @@ function PageIntro({ eyebrow, title, description, actions, children }) {
 }
 
 function Panel({ title, description, actions, accent = "#60a5fa", children, style = {} }) {
+  const th = useTheme();
   return (
     <div style={{
-      background: uiTheme.panel,
+      background: th.panel,
       border: `1px solid ${accent}28`,
       borderRadius: 18,
       padding: 20,
-      boxShadow: uiTheme.shadow,
+      boxShadow: th.shadow,
       ...style,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 14 }}>
         <div style={{ minWidth: 220, flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
             <div style={{ width: 10, height: 10, borderRadius: 999, background: accent, boxShadow: `0 0 0 6px ${accent}18` }} />
-            <div style={{ fontSize: 16, fontWeight: 800, color: uiTheme.text }}>{title}</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: th.text }}>{title}</div>
           </div>
-          {description && <div style={{ fontSize: 12, color: uiTheme.textMuted, lineHeight: 1.7 }}>{description}</div>}
+          {description && <div style={{ fontSize: 12, color: th.textMuted, lineHeight: 1.7 }}>{description}</div>}
         </div>
         {actions && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div>}
       </div>
@@ -762,29 +804,31 @@ class PageErrorBoundary extends React.Component {
 }
 
 function StatCard({ label, value, color, sub }) {
+  const th = useTheme();
   return (
     <div style={{
-      background: uiTheme.panel,
-      border: "1px solid " + uiTheme.panelBorder,
+      background: th.panel,
+      border: "1px solid " + th.panelBorder,
       borderRadius: 18,
       padding: "22px 24px",
       flex: 1,
       minWidth: 150,
       borderTop: `3px solid ${color}`,
-      boxShadow: uiTheme.shadow,
+      boxShadow: th.shadow,
     }}>
       <div style={{ fontSize: 32, fontWeight: 800, color, fontFamily: "'DM Mono', monospace", lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 13, color: uiTheme.textMuted, marginTop: 8, fontWeight: 700 }}>{label}</div>
-      {sub && <div style={{ fontSize: 11, color: uiTheme.textSoft, marginTop: 6, lineHeight: 1.6 }}>{sub}</div>}
+      <div style={{ fontSize: 13, color: th.textMuted, marginTop: 8, fontWeight: 700 }}>{label}</div>
+      {sub && <div style={{ fontSize: 11, color: th.textSoft, marginTop: 6, lineHeight: 1.6 }}>{sub}</div>}
     </div>
   );
 }
 
 function SectionHeader({ title, count, color = "#60a5fa" }) {
+  const th = useTheme();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
       <div style={{ width: 5, height: 22, background: color, borderRadius: 3 }} />
-      <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: uiTheme.text }}>{title}</h2>
+      <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: th.text }}>{title}</h2>
       {count !== undefined && (
         <span style={{ background: color + "18", color, borderRadius: 99, padding: "3px 10px", fontSize: 12, fontWeight: 700, border: `1px solid ${color}33` }}>{count}</span>
       )}
@@ -793,21 +837,23 @@ function SectionHeader({ title, count, color = "#60a5fa" }) {
 }
 
 function Modal({ title, onClose, children }) {
+  const th = useTheme();
   return (
     <div style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000,
       display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
     }} onClick={onClose}>
       <div style={{
-        background: "#162033", borderRadius: 20, padding: 32, maxWidth: 700, width: "100%",
-        maxHeight: "85vh", overflow: "auto", border: "1px solid rgba(148,163,184,0.18)",
+        background: th.modalBg, borderRadius: 20, padding: 32, maxWidth: 700, width: "100%",
+        maxHeight: "85vh", overflow: "auto", border: "1px solid " + th.modalBorder,
         boxShadow: "0 32px 80px rgba(0,0,0,0.6)",
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-          <h3 style={{ margin: 0, fontSize: 18, color: uiTheme.text, fontWeight: 800 }}>{title}</h3>
+          <h3 style={{ margin: 0, fontSize: 18, color: th.text, fontWeight: 800 }}>{title}</h3>
           <button onClick={onClose} style={{
-            background: "rgba(255,255,255,0.08)", border: "1px solid rgba(148,163,184,0.14)", borderRadius: 10,
-            color: uiTheme.textMuted, cursor: "pointer", padding: "8px 14px", fontSize: 13, fontWeight: 700,
+            background: th.isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+            border: "1px solid " + th.panelBorder, borderRadius: 10,
+            color: th.textMuted, cursor: "pointer", padding: "8px 14px", fontSize: 13, fontWeight: 700,
           }}>✕ 關閉</button>
         </div>
         {children}
@@ -4513,6 +4559,30 @@ function IsoProcedureBundle({ bundle, showPaths = false }) {
   );
 }
 
+function DocumentsManagerDetails({ documents, setDocuments }) {
+  const th = useTheme();
+  return (
+    <details style={{ background: th.panel, border:"1px solid " + th.panelBorder, borderRadius:18, padding:18, boxShadow: th.shadow }}>
+      <summary style={{ cursor:"pointer", fontSize:14, fontWeight:700, color: th.text }}>進階管理：原始文件清單、上傳與編修</summary>
+      <div style={{ marginTop:18 }}>
+        <DocumentsTab documents={documents} setDocuments={setDocuments} />
+      </div>
+    </details>
+  );
+}
+
+function LibraryDetailsPanel({ documents, manuals }) {
+  const th = useTheme();
+  return (
+    <details style={{ background: th.panel, border:"1px solid " + th.panelBorder, borderRadius:18, padding:18, boxShadow: th.shadow }}>
+      <summary style={{ cursor:"pointer", fontSize:14, fontWeight:700, color: th.text }}>原始文件庫視圖</summary>
+      <div style={{ marginTop:18 }}>
+        <LibraryTab documents={documents} manuals={manuals} />
+      </div>
+    </details>
+  );
+}
+
 function DocumentsManagerTab({ documents, setDocuments, manuals }) {
   const iso = buildIsoDocumentMap(documents, manuals);
 
@@ -4560,12 +4630,7 @@ function DocumentsManagerTab({ documents, setDocuments, manuals }) {
           </div>
         </Panel>
 
-        <details style={{ background:uiTheme.panel, border:"1px solid " + uiTheme.panelBorder, borderRadius:18, padding:18, boxShadow: uiTheme.shadow }}>
-          <summary style={{ cursor:"pointer", fontSize:14, fontWeight:700, color:"#e2e8f0" }}>進階管理：原始文件清單、上傳與編修</summary>
-          <div style={{ marginTop:18 }}>
-            <DocumentsTab documents={documents} setDocuments={setDocuments} />
-          </div>
-        </details>
+        <DocumentsManagerDetails documents={documents} setDocuments={setDocuments} />
       </div>
     </div>
   );
@@ -4636,12 +4701,7 @@ function LibraryHierarchyTab({ documents, manuals }) {
           <div style={{ textAlign:"center", padding:"36px 20px", color:"#64748b", fontSize:14 }}>沒有符合篩選條件的文件。</div>
         )}
 
-        <details style={{ background:uiTheme.panel, border:"1px solid " + uiTheme.panelBorder, borderRadius:18, padding:18, boxShadow: uiTheme.shadow }}>
-          <summary style={{ cursor:"pointer", fontSize:14, fontWeight:700, color:"#e2e8f0" }}>原始文件庫視圖</summary>
-          <div style={{ marginTop:18 }}>
-            <LibraryTab documents={documents} manuals={manuals} />
-          </div>
-        </details>
+        <LibraryDetailsPanel documents={documents} manuals={manuals} />
       </div>
     </div>
   );
@@ -4761,6 +4821,401 @@ function LibraryTab({ documents, manuals }) {
 }
 
 // ─── DASHBOARD HOME ──────────────────────────────────────────────────────────
+// ─── SPC MANAGEMENT TAB ──────────────────────────────────────────────────────
+
+function SpcImrChart({ result, label, color = "#38bdf8", spec = {} }) {
+  if (!result || !result.x_values || result.x_values.length === 0)
+    return <div style={{ color:"#475569", fontSize:12, textAlign:"center", padding:16 }}>尚無資料</div>;
+
+  const xVals = result.x_values;
+  const mrVals = result.mr_values || [];
+  const xBar = result.x_bar, xUcl = result.x_ucl, xLcl = result.x_lcl;
+  const mrBar = result.mr_bar, mrUcl = result.mr_ucl;
+  const oocX = new Set(result.ooc_x || []);
+  const oocMr = new Set(result.ooc_mr || []);
+
+  const W = 520, H = 130, padL = 40, padR = 12, padT = 14, padB = 20;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+
+  function makeScaler(vals, extras = []) {
+    const all = [...vals, ...extras].filter(v => v !== null && v !== undefined);
+    const mn = Math.min(...all), mx = Math.max(...all);
+    const pad = (mx - mn) * 0.15 || 0.5;
+    return { min: mn - pad, max: mx + pad };
+  }
+
+  function toY(v, domain) {
+    return padT + innerH - ((v - domain.min) / (domain.max - domain.min)) * innerH;
+  }
+
+  function polyline(vals, domain) {
+    return vals.map((v, i) => {
+      const x = padL + (i / Math.max(vals.length - 1, 1)) * innerW;
+      return `${x.toFixed(1)},${toY(v, domain).toFixed(1)}`;
+    }).join(" ");
+  }
+
+  const xDomain = makeScaler(xVals, [xUcl, xLcl, spec.usl, spec.lsl].filter(Boolean));
+  const mrDomain = makeScaler(mrVals, [mrUcl]);
+
+  function hLine(y, stroke, dash = "") {
+    return <line x1={padL} y1={y} x2={padL + innerW} y2={y} stroke={stroke} strokeWidth={1} strokeDasharray={dash} />;
+  }
+
+  const uslY = spec.usl != null ? toY(spec.usl, xDomain) : null;
+  const lslY = spec.lsl != null ? toY(spec.lsl, xDomain) : null;
+
+  return (
+    <div>
+      <div style={{ fontSize:12, color:"#94a3b8", marginBottom:4, fontWeight:600 }}>{label} — X 管制圖</div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display:"block", overflow:"visible" }}>
+        {/* gridlines */}
+        {hLine(toY(xUcl, xDomain), "rgba(239,68,68,0.5)", "4 2")}
+        {hLine(toY(xBar, xDomain), "rgba(255,255,255,0.25)")}
+        {hLine(toY(xLcl, xDomain), "rgba(239,68,68,0.5)", "4 2")}
+        {uslY && hLine(uslY, "rgba(251,191,36,0.6)", "2 3")}
+        {lslY && hLine(lslY, "rgba(251,191,36,0.6)", "2 3")}
+        {/* area */}
+        <polyline points={polyline(xVals, xDomain)} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" />
+        {/* points */}
+        {xVals.map((v, i) => {
+          const cx = padL + (i / Math.max(xVals.length - 1, 1)) * innerW;
+          const cy = toY(v, xDomain);
+          const isOoc = oocX.has(i);
+          return <circle key={i} cx={cx} cy={cy} r={isOoc ? 4 : 2.5} fill={isOoc ? "#ef4444" : color} />;
+        })}
+        {/* Y labels */}
+        <text x={padL - 4} y={toY(xUcl, xDomain) + 4} textAnchor="end" fill="#ef4444" fontSize={8}>UCL</text>
+        <text x={padL - 4} y={toY(xBar, xDomain) + 4} textAnchor="end" fill="#94a3b8" fontSize={8}>X̄</text>
+        <text x={padL - 4} y={toY(xLcl, xDomain) + 4} textAnchor="end" fill="#ef4444" fontSize={8}>LCL</text>
+        {/* X axis ticks */}
+        {xVals.map((_, i) => i % Math.ceil(xVals.length / 8) === 0 ? (
+          <text key={i} x={padL + (i / Math.max(xVals.length - 1, 1)) * innerW} y={H - 4} textAnchor="middle" fill="#475569" fontSize={7}>{i + 1}</text>
+        ) : null)}
+      </svg>
+      {mrVals.length > 0 && (
+        <>
+          <div style={{ fontSize:12, color:"#94a3b8", marginBottom:4, marginTop:10, fontWeight:600 }}>{label} — MR 管制圖</div>
+          <svg width="100%" viewBox={`0 0 ${W} ${Math.round(H * 0.65)}`} style={{ display:"block", overflow:"visible" }}>
+            {hLine(toY(mrUcl, mrDomain), "rgba(239,68,68,0.5)", "4 2")}
+            {hLine(toY(mrBar, mrDomain), "rgba(255,255,255,0.2)")}
+            <polyline points={polyline(mrVals, mrDomain)} fill="none" stroke="#a78bfa" strokeWidth={1.5} />
+            {mrVals.map((v, i) => {
+              const cx = padL + (i / Math.max(mrVals.length - 1, 1)) * innerW;
+              const cy = toY(v, mrDomain);
+              return <circle key={i} cx={cx} cy={cy} r={oocMr.has(i) ? 4 : 2} fill={oocMr.has(i) ? "#ef4444" : "#a78bfa"} />;
+            })}
+            <text x={padL - 4} y={toY(mrUcl, mrDomain) + 4} textAnchor="end" fill="#ef4444" fontSize={8}>UCL</text>
+          </svg>
+        </>
+      )}
+    </div>
+  );
+}
+
+function CpkGauge({ cpk, label }) {
+  if (cpk == null) return null;
+  const grade = cpk >= 1.67 ? { text:"A+", color:"#22c55e" }
+    : cpk >= 1.33 ? { text:"A",  color:"#4ade80" }
+    : cpk >= 1.00 ? { text:"B",  color:"#f59e0b" }
+    : cpk >= 0.67 ? { text:"C",  color:"#f97316" }
+    : { text:"D", color:"#ef4444" };
+  const pct = Math.min(cpk / 2.0, 1.0);
+  return (
+    <div style={{ textAlign:"center" }}>
+      <div style={{ fontSize:11, color:"#64748b", marginBottom:4 }}>{label}</div>
+      <div style={{ width:72, height:72, borderRadius:"50%", border:`3px solid ${grade.color}`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", margin:"0 auto" }}>
+        <div style={{ fontSize:18, fontWeight:800, color:grade.color, lineHeight:1 }}>{cpk.toFixed(2)}</div>
+        <div style={{ fontSize:11, fontWeight:700, color:grade.color }}>{grade.text}</div>
+      </div>
+      <div style={{ width:72, height:5, background:"rgba(255,255,255,0.07)", borderRadius:3, margin:"6px auto 0", overflow:"hidden" }}>
+        <div style={{ width:(pct * 100) + "%", height:"100%", background:grade.color, borderRadius:3 }} />
+      </div>
+    </div>
+  );
+}
+
+const NELSON_LABELS = {
+  rule_1_beyond_3sigma:     "Rule 1：超出 ±3σ",
+  rule_2_nine_same_side:    "Rule 2：連續 9 點同側",
+  rule_3_six_monotone:      "Rule 3：連續 6 點單調",
+  rule_4_fourteen_alternating: "Rule 4：連續 14 點交替",
+  rule_5_two_of_three_2sigma:  "Rule 5：3 點中 2 點超 ±2σ",
+  rule_6_four_of_five_1sigma:  "Rule 6：5 點中 4 點超 ±1σ",
+};
+
+function SpcTab({ prodRecords }) {
+  const [csvFile, setCsvFile] = useState(null);
+  const [batchId, setBatchId] = useState("");
+  const [specForm, setSpecForm] = useState({ thickness_usl:"705", thickness_lsl:"695", ttv_usl:"2.0", ttv_lsl:"0.0" });
+  const [result, setResult] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [activeResult, setActiveResult] = useState(null);
+  const fileRef = useRef(null);
+
+  useEffect(() => {
+    fetch("/api/spc/history").then(r => r.json()).then(d => setHistory(d.items || [])).catch(() => {});
+  }, []);
+
+  async function handleAnalyze() {
+    if (!csvFile && !batchId) { setMsg("請選擇 CSV 檔案"); return; }
+    setBusy(true); setMsg(""); setResult(null);
+    try {
+      let res;
+      if (csvFile) {
+        const fd = new FormData();
+        fd.append("csv_file", csvFile);
+        fd.append("batch_id", batchId || csvFile.name.replace(/\.csv$/i, ""));
+        fd.append("spec", JSON.stringify({
+          thickness_usl: parseFloat(specForm.thickness_usl),
+          thickness_lsl: parseFloat(specForm.thickness_lsl),
+          ttv_usl: parseFloat(specForm.ttv_usl),
+          ttv_lsl: parseFloat(specForm.ttv_lsl),
+        }));
+        const resp = await fetch("/api/spc/analyze", { method:"POST", body: fd });
+        res = await resp.json();
+      }
+      if (!res.success) throw new Error(res.error || "分析失敗");
+      setResult(res);
+      setActiveResult(res.result);
+      // 重新載入歷史
+      const hResp = await fetch("/api/spc/history");
+      const hData = await hResp.json();
+      setHistory(hData.items || []);
+      setMsg("✓ 分析完成");
+    } catch (e) {
+      setMsg("❌ " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const displayResult = activeResult || (result && result.result);
+  const thk = displayResult && displayResult.thickness;
+  const ttv = displayResult && displayResult.ttv;
+  const summary = displayResult && displayResult.summary;
+
+  const allNelson = [];
+  [["Thickness", thk], ["TTV", ttv]].forEach(([name, r]) => {
+    if (!r) return;
+    Object.entries(r.nelson_signals || {}).forEach(([k, pts]) => {
+      if (pts && pts.length) allNelson.push({ name, rule: NELSON_LABELS[k] || k, count: pts.length });
+    });
+  });
+
+  const panel = (children, style={}) => (
+    <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:20, ...style }}>
+      {children}
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ marginBottom:20 }}>
+        <div style={{ fontSize:20, fontWeight:800, color:"#e2e8f0" }}>SPC 統計製程管制</div>
+        <div style={{ fontSize:13, color:"#64748b", marginTop:4 }}>晶圓清洗製程 — Thickness / TTV / Particle 管制圖</div>
+      </div>
+
+      {/* ── 上傳區 ── */}
+      {panel(<>
+        <div style={{ fontSize:13, fontWeight:700, color:"#e2e8f0", marginBottom:16 }}>上傳 CSV 量測資料</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:12, marginBottom:16 }}>
+          {[
+            { key:"thickness_usl", label:"Thickness USL (μm)" },
+            { key:"thickness_lsl", label:"Thickness LSL (μm)" },
+            { key:"ttv_usl",       label:"TTV USL (μm)" },
+            { key:"ttv_lsl",       label:"TTV LSL (μm)" },
+          ].map(f => (
+            <div key={f.key}>
+              <div style={{ fontSize:11, color:"#64748b", marginBottom:4 }}>{f.label}</div>
+              <input type="number" step="0.1" value={specForm[f.key]}
+                onChange={e => setSpecForm(p => ({...p, [f.key]: e.target.value}))}
+                style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:8, padding:"6px 10px", color:"#e2e8f0", fontSize:13 }} />
+            </div>
+          ))}
+        </div>
+        <div style={{ display:"flex", gap:12, alignItems:"center", flexWrap:"wrap" }}>
+          <input type="text" placeholder="批次 ID（選填，預設用檔名）" value={batchId}
+            onChange={e => setBatchId(e.target.value)}
+            style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:8, padding:"7px 12px", color:"#e2e8f0", fontSize:13, width:220 }} />
+          <button onClick={() => fileRef.current && fileRef.current.click()}
+            style={{ background:"rgba(56,189,248,0.12)", border:"1px solid rgba(56,189,248,0.3)", borderRadius:8, padding:"7px 16px", color:"#7dd3fc", fontSize:13, cursor:"pointer", fontWeight:600 }}>
+            {csvFile ? `📄 ${csvFile.name}` : "選擇 CSV 檔"}
+          </button>
+          <input ref={fileRef} type="file" accept=".csv" style={{ display:"none" }}
+            onChange={e => { setCsvFile(e.target.files[0] || null); setBatchId(prev => prev || (e.target.files[0] ? e.target.files[0].name.replace(/\.csv$/i,"") : "")); }} />
+          <button onClick={handleAnalyze} disabled={busy || !csvFile}
+            style={{ background: busy || !csvFile ? "rgba(255,255,255,0.04)" : "linear-gradient(90deg,#3b82f6,#6366f1)", border:"none", borderRadius:8, padding:"7px 20px", color: busy || !csvFile ? "#475569" : "#fff", fontSize:13, cursor: busy || !csvFile ? "default" : "pointer", fontWeight:700 }}>
+            {busy ? "分析中…" : "開始分析"}
+          </button>
+          {msg && <span style={{ fontSize:13, color: msg.startsWith("✓") ? "#22c55e" : "#ef4444" }}>{msg}</span>}
+        </div>
+        {result && result.parse_errors && result.parse_errors.length > 0 && (
+          <div style={{ marginTop:12, padding:"8px 12px", background:"rgba(234,179,8,0.08)", border:"1px solid rgba(234,179,8,0.3)", borderRadius:8 }}>
+            {result.parse_errors.map((e, i) => <div key={i} style={{ fontSize:12, color:"#fde68a" }}>{e}</div>)}
+          </div>
+        )}
+      </>, { marginBottom:16 })}
+
+      {/* ── 分析結果 ── */}
+      {displayResult && (
+        <>
+          {/* Summary 警示 */}
+          {summary && summary.needs_attention && (
+            <div style={{ marginBottom:14, padding:"10px 16px", background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:10, display:"flex", gap:10, alignItems:"center" }}>
+              <span style={{ fontSize:16 }}>⚠</span>
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color:"#fca5a5" }}>製程異常警示</div>
+                <div style={{ fontSize:12, color:"#fca5a5", marginTop:2 }}>
+                  {summary.any_ooc && "偵測到超出管制界限（OOC）的點；"}
+                  {summary.any_nelson && "Nelson Rules 訊號觸發，請確認製程狀態。"}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Nelson Rules */}
+          {allNelson.length > 0 && panel(<>
+            <div style={{ fontSize:13, fontWeight:700, color:"#fbbf24", marginBottom:10 }}>⚡ Nelson Rules 失控訊號</div>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+              {allNelson.map((n, i) => (
+                <div key={i} style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, padding:"5px 12px", fontSize:12, color:"#fca5a5" }}>
+                  <span style={{ fontWeight:700 }}>[{n.name}]</span> {n.rule}（{n.count} 處）
+                </div>
+              ))}
+            </div>
+          </>, { marginBottom:14 })}
+
+          {/* Cpk 儀錶 + 統計摘要 */}
+          {panel(<>
+            <div style={{ fontSize:13, fontWeight:700, color:"#e2e8f0", marginBottom:14 }}>製程能力指數</div>
+            <div style={{ display:"flex", gap:32, flexWrap:"wrap", alignItems:"flex-start" }}>
+              <CpkGauge cpk={summary && summary.thickness_cpk} label="Thickness Cpk" />
+              <CpkGauge cpk={summary && summary.ttv_cpk} label="TTV Cpk" />
+              <div style={{ flex:1, minWidth:200 }}>
+                {thk && thk.capability && (
+                  <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.9 }}>
+                    <div>Thickness：X̄ = <span style={{ color:"#e2e8f0" }}>{thk.x_bar.toFixed(3)} μm</span> / σ = <span style={{ color:"#e2e8f0" }}>{thk.sigma_mr.toFixed(4)}</span></div>
+                    {thk.capability.cp   != null && <div>Cp = <span style={{ color:"#60a5fa" }}>{thk.capability.cp}</span></div>}
+                    {thk.capability.cpk  != null && <div>Cpk = <span style={{ color:"#60a5fa" }}>{thk.capability.cpk}</span> <span style={{ color:"#475569" }}>({thk.capability.grade})</span></div>}
+                  </div>
+                )}
+                {ttv && ttv.capability && (
+                  <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.9, marginTop:8 }}>
+                    <div>TTV：X̄ = <span style={{ color:"#e2e8f0" }}>{ttv.x_bar.toFixed(4)} μm</span> / σ = <span style={{ color:"#e2e8f0" }}>{ttv.sigma_mr.toFixed(5)}</span></div>
+                    {ttv.capability.cpk != null && <div>Cpk = <span style={{ color:"#60a5fa" }}>{ttv.capability.cpk}</span> <span style={{ color:"#475569" }}>({ttv.capability.grade})</span></div>}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>, { marginBottom:14 })}
+
+          {/* I-MR 圖 */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:14 }}>
+            {thk && panel(<>
+              <div style={{ fontSize:13, fontWeight:700, color:"#e2e8f0", marginBottom:12 }}>Thickness I-MR 管制圖</div>
+              <SpcImrChart result={thk} label="Thickness" color="#38bdf8"
+                spec={{ usl: parseFloat(specForm.thickness_usl), lsl: parseFloat(specForm.thickness_lsl) }} />
+              {thk.ooc_x && thk.ooc_x.length > 0 && (
+                <div style={{ marginTop:8, fontSize:11, color:"#fca5a5" }}>
+                  OOC 點：第 {thk.ooc_x.map(i => i + 1).join("、")} 筆
+                </div>
+              )}
+            </>)}
+            {ttv && panel(<>
+              <div style={{ fontSize:13, fontWeight:700, color:"#e2e8f0", marginBottom:12 }}>TTV I-MR 管制圖</div>
+              <SpcImrChart result={ttv} label="TTV" color="#a78bfa"
+                spec={{ usl: parseFloat(specForm.ttv_usl), lsl: parseFloat(specForm.ttv_lsl) }} />
+              {ttv.ooc_x && ttv.ooc_x.length > 0 && (
+                <div style={{ marginTop:8, fontSize:11, color:"#fca5a5" }}>
+                  OOC 點：第 {ttv.ooc_x.map(i => i + 1).join("、")} 筆
+                </div>
+              )}
+            </>)}
+          </div>
+        </>
+      )}
+
+      {/* ── 跨批次 Cpk 趨勢圖 ── */}
+      {history.length >= 2 && panel(<>
+        <div style={{ fontSize:13, fontWeight:700, color:"#e2e8f0", marginBottom:14 }}>跨批次 Cpk 趨勢（近 {Math.min(history.length,20)} 批）</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+          {[
+            { key:"thickness_cpk", label:"Thickness Cpk", color:"#38bdf8" },
+            { key:"ttv_cpk",       label:"TTV Cpk",       color:"#a78bfa" },
+          ].map(({ key, label, color }) => {
+            const pts = [...history].reverse().slice(0, 20)
+              .filter(h => h[key] != null)
+              .map((h, i) => ({ label: String(i + 1), value: h[key] }));
+            return (
+              <div key={key}>
+                <div style={{ fontSize:11, color:"#64748b", marginBottom:6, fontWeight:600 }}>{label}</div>
+                {pts.length >= 2
+                  ? <SvgLineChart data={pts} color={color} domainMin={0} domainMax={Math.max(2, ...pts.map(p => p.value)) * 1.1} />
+                  : <div style={{ fontSize:11, color:"#475569" }}>需 2 筆以上</div>
+                }
+                {/* 目標線說明 */}
+                <div style={{ display:"flex", gap:12, marginTop:4 }}>
+                  {[{v:1.33,c:"#22c55e",t:"A（≥1.33）"},{v:1.00,c:"#f59e0b",t:"B（≥1.00）"}].map(g => (
+                    <div key={g.v} style={{ display:"flex", alignItems:"center", gap:4 }}>
+                      <div style={{ width:12, height:2, background:g.c, borderRadius:1 }} />
+                      <span style={{ fontSize:9, color:"#475569" }}>{g.t}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </>, { marginBottom:16 })}
+
+      {/* ── 歷史記錄 ── */}
+      {panel(<>
+        <div style={{ fontSize:13, fontWeight:700, color:"#e2e8f0", marginBottom:14 }}>近期分析記錄</div>
+        {history.length === 0 && <div style={{ color:"#475569", fontSize:12 }}>尚無分析記錄</div>}
+        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+          {history.slice(0, 10).map((h, i) => {
+            const tCpk = h.thickness_cpk, vCpk = h.ttv_cpk;
+            const tColor = tCpk == null ? "#475569" : tCpk >= 1.33 ? "#22c55e" : tCpk >= 1.00 ? "#f59e0b" : "#ef4444";
+            const vColor = vCpk == null ? "#475569" : vCpk >= 1.33 ? "#22c55e" : vCpk >= 1.00 ? "#f59e0b" : "#ef4444";
+            return (
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 12px", background:"rgba(255,255,255,0.02)", borderRadius:8, border:"1px solid rgba(255,255,255,0.06)", cursor:"pointer" }}
+                onClick={() => setActiveResult(h.result || null)}
+                onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.05)"}
+                onMouseLeave={e => e.currentTarget.style.background="rgba(255,255,255,0.02)"}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12, color:"#e2e8f0", fontWeight:600 }}>{h.batch_id}</div>
+                  <div style={{ fontSize:11, color:"#475569" }}>{h.analyzed_at} · {h.thickness_n || 0} 筆</div>
+                </div>
+                <div style={{ display:"flex", gap:16 }}>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:10, color:"#64748b" }}>Thickness Cpk</div>
+                    <div style={{ fontSize:13, fontWeight:700, color:tColor }}>{tCpk != null ? tCpk.toFixed(2) : "–"}</div>
+                  </div>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:10, color:"#64748b" }}>TTV Cpk</div>
+                    <div style={{ fontSize:13, fontWeight:700, color:vColor }}>{vCpk != null ? vCpk.toFixed(2) : "–"}</div>
+                  </div>
+                  {h.needs_attention && <span style={{ fontSize:11, color:"#ef4444", alignSelf:"center" }}>⚠ 異常</span>}
+                  {h.has_raw_rows && (
+                    <a href={`/api/spc/fosb?batch_id=${encodeURIComponent(h.batch_id)}`}
+                      download onClick={e => e.stopPropagation()}
+                      style={{ fontSize:11, color:"#7dd3fc", background:"rgba(56,189,248,0.08)", border:"1px solid rgba(56,189,248,0.2)", borderRadius:6, padding:"3px 8px", textDecoration:"none", alignSelf:"center", whiteSpace:"nowrap" }}>
+                      ↓ FOSB
+                    </a>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </>)}
+    </div>
+  );
+}
+
 // ─── SVG CHART PRIMITIVES ────────────────────────────────────────────────────
 
 function SvgBarChart({ data, width = 420, height = 150, color = "#3b82f6" }) {
@@ -4868,6 +5323,18 @@ function KpiDashboard({ instruments, suppliers, nonConformances, auditPlans, env
   const audits   = safeArr(auditPlans);
   const qrs      = safeArr(qualityRecords);
 
+  // ── SPC Cpk（從歷史記錄 API 抓最新一筆）──────────────────────
+  const [latestCpk, setLatestCpk] = useState(null);
+  useEffect(() => {
+    fetch("/api/spc/history")
+      .then(r => r.json())
+      .then(d => {
+        const items = d.items || [];
+        if (items.length > 0) setLatestCpk({ thickness: items[0].thickness_cpk, ttv: items[0].ttv_cpk, batch: items[0].batch_id });
+      })
+      .catch(() => {});
+  }, []);
+
   // ── 良品率折線 ──────────────────────────────────────────────
   const yieldData = prods.map(r => ({
     label: (r.lot || "").length >= 11 ? (r.lot || "").substring(7, 11) : (r.lot || "").substring(0, 6) || "?",
@@ -4963,6 +5430,22 @@ function KpiDashboard({ instruments, suppliers, nonConformances, auditPlans, env
       value: qcRate !== null ? qcRate + "%" : "–",
       color: qcRate === null ? "#475569" : qcRate >= 95 ? "#22c55e" : qcRate >= 80 ? "#f59e0b" : "#ef4444",
       desc:  `${qcTotal} 批`,
+    },
+    {
+      label: "Thickness Cpk",
+      value: latestCpk && latestCpk.thickness != null ? latestCpk.thickness.toFixed(2) : "–",
+      color: !latestCpk || latestCpk.thickness == null ? "#475569"
+        : latestCpk.thickness >= 1.33 ? "#22c55e"
+        : latestCpk.thickness >= 1.00 ? "#f59e0b" : "#ef4444",
+      desc: latestCpk ? latestCpk.batch : "尚無 SPC 記錄",
+    },
+    {
+      label: "TTV Cpk",
+      value: latestCpk && latestCpk.ttv != null ? latestCpk.ttv.toFixed(2) : "–",
+      color: !latestCpk || latestCpk.ttv == null ? "#475569"
+        : latestCpk.ttv >= 1.33 ? "#22c55e"
+        : latestCpk.ttv >= 1.00 ? "#f59e0b" : "#ef4444",
+      desc: latestCpk ? latestCpk.batch : "尚無 SPC 記錄",
     },
   ];
 
@@ -5174,12 +5657,220 @@ function DashboardHome({ instruments, documents, training, equipment, suppliers,
   );
 }
 
+// ─── 角色可見分頁定義 ────────────────────────────────────────────────────────
+const ROLE_TABS = {
+  qms:        ["home","kpi","spc","calibration","documents","library","training","equipment","supplier","nonconformance","auditplan","environment","production","notification","aiworkbench","report"],
+  executive:  ["home","kpi","spc"],
+  supervisor: ["home","kpi","spc","nonconformance","environment","production"],
+  auditor:    ["home","calibration","documents","library","nonconformance","auditplan","report"],
+};
+
+// ─── 登入畫面 ────────────────────────────────────────────────────────────────
+function LoginScreen({ onLogin }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [showPw, setShowPw] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setBusy(true); setError("");
+    try {
+      const resp = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.trim().toLowerCase(), password }),
+      });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || "登入失敗");
+      localStorage.setItem("qms_token", data.token);
+      localStorage.setItem("qms_user", JSON.stringify(data.user));
+      onLogin(data.user);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const accounts = [
+    { role:"品管人員",  user:"qms",   pw:"qms1234"   },
+    { role:"高階主管",  user:"exec",  pw:"exec1234"  },
+    { role:"生產主管",  user:"super", pw:"super1234" },
+    { role:"外部稽核員",user:"audit", pw:"audit1234" },
+  ];
+
+  return (
+    <div style={{ minHeight:"100vh", background:"radial-gradient(circle at top left, rgba(14,165,233,0.08), transparent 26%), linear-gradient(135deg, #08101f 0%, #0b1220 45%, #080d18 100%)", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Noto Sans TC', sans-serif" }}>
+      <div style={{ width:400 }}>
+        {/* Logo */}
+        <div style={{ textAlign:"center", marginBottom:36 }}>
+          <div style={{ fontSize:13, letterSpacing:2, textTransform:"uppercase", color:"#7dd3fc", fontWeight:800, marginBottom:6 }}>Jepei QMS</div>
+          <div style={{ fontSize:22, fontWeight:800, color:"#e2e8f0" }}>潔沛企業有限公司</div>
+          <div style={{ fontSize:13, color:"#64748b", marginTop:4 }}>ISO 9001:2015 品質管理系統</div>
+        </div>
+
+        {/* 登入表單 */}
+        <form onSubmit={handleSubmit} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:16, padding:32 }}>
+          <div style={{ fontSize:16, fontWeight:700, color:"#e2e8f0", marginBottom:24 }}>登入系統</div>
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>帳號</div>
+            <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="請輸入帳號" autoFocus
+              style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:8, padding:"9px 12px", color:"#e2e8f0", fontSize:14, outline:"none", boxSizing:"border-box" }} />
+          </div>
+          <div style={{ marginBottom:24 }}>
+            <div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>密碼</div>
+            <div style={{ position:"relative" }}>
+              <input type={showPw ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="請輸入密碼"
+                style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:8, padding:"9px 40px 9px 12px", color:"#e2e8f0", fontSize:14, outline:"none", boxSizing:"border-box" }} />
+              <button type="button" onClick={() => setShowPw(p => !p)}
+                style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:13, padding:2 }}>
+                {showPw ? "隱藏" : "顯示"}
+              </button>
+            </div>
+          </div>
+          {error && <div style={{ marginBottom:16, padding:"8px 12px", background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, fontSize:13, color:"#fca5a5" }}>{error}</div>}
+          <button type="submit" disabled={busy || !username || !password}
+            style={{ width:"100%", padding:"10px 0", background: busy || !username || !password ? "rgba(255,255,255,0.05)" : "linear-gradient(90deg,#3b82f6,#6366f1)", border:"none", borderRadius:8, color: busy || !username || !password ? "#475569" : "#fff", fontSize:14, fontWeight:700, cursor: busy || !username || !password ? "default" : "pointer" }}>
+            {busy ? "登入中…" : "登入"}
+          </button>
+        </form>
+
+        {/* 預設帳號提示 */}
+        <div style={{ marginTop:20, background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:12, padding:16 }}>
+          <div style={{ fontSize:11, color:"#475569", marginBottom:10, fontWeight:600 }}>預設帳號（初次使用請更改密碼）</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+            {accounts.map(a => (
+              <button key={a.user} type="button"
+                onClick={() => { setUsername(a.user); setPassword(a.pw); }}
+                style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:8, padding:"6px 10px", textAlign:"left", cursor:"pointer" }}>
+                <div style={{ fontSize:11, color:"#94a3b8", fontWeight:600 }}>{a.role}</div>
+                <div style={{ fontSize:10, color:"#475569", marginTop:2 }}>{a.user} / {a.pw}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 更改密碼 Modal ──────────────────────────────────────────────────────────
+function ChangePasswordModal({ token, onClose }) {
+  const [form, setForm] = useState({ old_password:"", new_password:"", confirm:"" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (form.new_password !== form.confirm) { setMsg("兩次新密碼不一致"); return; }
+    if (form.new_password.length < 6) { setMsg("密碼至少 6 個字元"); return; }
+    setBusy(true); setMsg("");
+    try {
+      const resp = await fetch("/api/auth/change-password", {
+        method:"POST",
+        headers: { "Content-Type":"application/json", "Authorization":"Bearer " + token },
+        body: JSON.stringify({ old_password: form.old_password, new_password: form.new_password }),
+      });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || "更新失敗");
+      setMsg("✓ 密碼已更新");
+      setTimeout(onClose, 1200);
+    } catch(err) {
+      setMsg("❌ " + err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:999, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <form onSubmit={handleSubmit} style={{ background:"#0f1929", border:"1px solid rgba(255,255,255,0.12)", borderRadius:14, padding:28, width:340 }}>
+        <div style={{ fontSize:15, fontWeight:700, color:"#e2e8f0", marginBottom:20 }}>更改密碼</div>
+        {["old_password","new_password","confirm"].map(k => (
+          <div key={k} style={{ marginBottom:14 }}>
+            <div style={{ fontSize:11, color:"#64748b", marginBottom:4 }}>
+              {k === "old_password" ? "舊密碼" : k === "new_password" ? "新密碼" : "確認新密碼"}
+            </div>
+            <input type="password" value={form[k]} onChange={e => setForm(p => ({...p, [k]: e.target.value}))}
+              style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:8, padding:"7px 10px", color:"#e2e8f0", fontSize:13, boxSizing:"border-box" }} />
+          </div>
+        ))}
+        {msg && <div style={{ marginBottom:12, fontSize:12, color: msg.startsWith("✓") ? "#22c55e" : "#fca5a5" }}>{msg}</div>}
+        <div style={{ display:"flex", gap:10 }}>
+          <button type="submit" disabled={busy} style={{ flex:1, padding:"8px 0", background:"linear-gradient(90deg,#3b82f6,#6366f1)", border:"none", borderRadius:8, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+            {busy ? "更新中…" : "確認更新"}
+          </button>
+          <button type="button" onClick={onClose} style={{ padding:"8px 16px", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, color:"#94a3b8", fontSize:13, cursor:"pointer" }}>取消</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
 export default function App() {
+  // ── 主題狀態（深色/淺色）────────────────────────────────────
+  const [darkMode, setDarkMode] = useState(() => {
+    try { return localStorage.getItem("qms_theme") !== "light"; } catch { return true; }
+  });
+  function toggleTheme() {
+    setDarkMode(d => {
+      const next = !d;
+      try { localStorage.setItem("qms_theme", next ? "dark" : "light"); } catch {}
+      return next;
+    });
+  }
+  const theme = darkMode ? DARK_THEME : LIGHT_THEME;
+
+  // ── 身份驗證狀態 ──────────────────────────────────────────────
+  const [authUser, setAuthUser] = useState(() => {
+    try {
+      const raw = localStorage.getItem("qms_user");
+      if (!raw) return null;
+      const u = JSON.parse(raw);
+      // 快速驗證 token 仍有效
+      const token = localStorage.getItem("qms_token");
+      if (!token) return null;
+      return u;
+    } catch { return null; }
+  });
+  const [showChangePw, setShowChangePw] = useState(false);
+
+  // 驗證 token 是否仍有效（頁面載入時）
+  useEffect(() => {
+    const token = localStorage.getItem("qms_token");
+    if (!token) { setAuthUser(null); return; }
+    fetch("/api/auth/me", { headers: { Authorization: "Bearer " + token } })
+      .then(r => r.json())
+      .then(d => { if (!d.success) { setAuthUser(null); localStorage.removeItem("qms_token"); localStorage.removeItem("qms_user"); } })
+      .catch(() => {});
+  }, []);
+
+  function handleLogin(user) { setAuthUser(user); }
+  function handleLogout() {
+    localStorage.removeItem("qms_token");
+    localStorage.removeItem("qms_user");
+    setAuthUser(null);
+  }
+
+  // ── 未登入 → 顯示登入畫面 ────────────────────────────────────
+  if (!authUser) return (
+    <ThemeContext.Provider value={theme}>
+      <LoginScreen onLogin={handleLogin} />
+    </ThemeContext.Provider>
+  );
+
+  const userRole = authUser.role || "qms";
+  const allowedTabs = ROLE_TABS[userRole] || ROLE_TABS.qms;
+
+  // ── 主應用狀態 ────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window === "undefined") return "home";
     const params = new URLSearchParams(window.location.search);
-    return params.get("google") ? "notification" : (params.get("tab") || "home");
+    const t = params.get("google") ? "notification" : (params.get("tab") || "home");
+    return allowedTabs.includes(t) ? t : "home";
   });
   const [instruments, setInstruments] = useState(initialInstruments);
   const [documents, setDocuments] = useState(initialDocuments);
@@ -5219,28 +5910,33 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  const tabs = [
-    { id: "home",           label: "主控台",   icon: "⌂" },
-    { id: "kpi",            label: "績效儀表板", icon: "▦" },
-    { id: "calibration",    label: "校正管理", icon: "◎" },
-    { id: "documents",      label: "文件管理", icon: "≡" },
-    { id: "library",        label: "文件庫",   icon: "📂" },
-    { id: "training",       label: "訓練管理", icon: "□" },
-    { id: "equipment",      label: "設備保養", icon: "⚙" },
-    { id: "supplier",       label: "供應商管理", icon: "◈" },
-    { id: "nonconformance", label: "不符合管理", icon: "⚠" },
-    { id: "auditplan",      label: "稽核計畫", icon: "✓" },
-    { id: "environment",    label: "環境監測", icon: "◉" },
-    { id: "production",     label: "記錄匯出", icon: "R" },
-    { id: "notification",   label: "通知提醒", icon: "✉" },
-    { id: "aiworkbench",    label: "AI 工作台", icon: "AI" },
-    { id: "report",         label: "稽核報告", icon: "☰" },
+  const allTabs = [
+    { id: "home",           label: "主控台",     icon: "⌂" },
+    { id: "kpi",            label: "績效儀表板",  icon: "▦" },
+    { id: "spc",            label: "SPC 管制圖",  icon: "∿" },
+    { id: "calibration",    label: "校正管理",   icon: "◎" },
+    { id: "documents",      label: "文件管理",   icon: "≡" },
+    { id: "library",        label: "文件庫",     icon: "📂" },
+    { id: "training",       label: "訓練管理",   icon: "□" },
+    { id: "equipment",      label: "設備保養",   icon: "⚙" },
+    { id: "supplier",       label: "供應商管理",  icon: "◈" },
+    { id: "nonconformance", label: "不符合管理",  icon: "⚠" },
+    { id: "auditplan",      label: "稽核計畫",   icon: "✓" },
+    { id: "environment",    label: "環境監測",   icon: "◉" },
+    { id: "production",     label: "記錄匯出",   icon: "R" },
+    { id: "notification",   label: "通知提醒",   icon: "✉" },
+    { id: "aiworkbench",    label: "AI 工作台",  icon: "AI" },
+    { id: "report",         label: "稽核報告",   icon: "☰" },
   ];
+  const tabs = allTabs.filter(t => allowedTabs.includes(t.id));
+
+  function setTabSafe(id) { if (allowedTabs.includes(id)) setActiveTab(id); }
 
   function renderTab() {
     switch(activeTab) {
-      case "home":           return <DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setActiveTab} />;
+      case "home":           return <DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setTabSafe} />;
       case "kpi":            return <KpiDashboard instruments={instruments} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} prodRecords={prodRecords} qualityRecords={qualityRecords} />;
+      case "spc":            return <SpcTab prodRecords={prodRecords} />;
       case "calibration":    return <CalibrationTab instruments={instruments} setInstruments={setInstruments} />;
       case "documents":      return <DocumentsManagerTab documents={documents} setDocuments={setDocuments} manuals={manuals} />;
       case "library":        return <LibraryHierarchyTab documents={documents} manuals={manuals} />;
@@ -5250,49 +5946,67 @@ export default function App() {
       case "nonconformance": return <NonConformanceTab nonConformances={nonConformances} setNonConformances={setNonConformances} highlightNcId={highlightNcId} onHighlightDone={() => setHighlightNcId(null)} expandNcId={expandNcId} onExpandDone={() => setExpandNcId(null)} />;
       case "auditplan":      return <AuditPlanTab auditPlans={auditPlans} setAuditPlans={setAuditPlans} />;
       case "environment":    return <EnvironmentTab envRecords={envRecords} setEnvRecords={setEnvRecords} />;
-    case "production":     return <PageErrorBoundary pageName="????" storageKeys={["audit_prodrecords", "audit_qualityrecords"]}><ProductionTab envRecords={envRecords} prodRecords={prodRecords} setProdRecords={setProdRecords} qualityRecords={qualityRecords} setQualityRecords={setQualityRecords} nonConformances={nonConformances} auditPlans={auditPlans} setActiveTab={setActiveTab} setHighlightNcId={setHighlightNcId} setExpandNcId={setExpandNcId} /></PageErrorBoundary>;
+      case "production":     return <PageErrorBoundary pageName="記錄匯出" storageKeys={["audit_prodrecords", "audit_qualityrecords"]}><ProductionTab envRecords={envRecords} prodRecords={prodRecords} setProdRecords={setProdRecords} qualityRecords={qualityRecords} setQualityRecords={setQualityRecords} nonConformances={nonConformances} auditPlans={auditPlans} setActiveTab={setTabSafe} setHighlightNcId={setHighlightNcId} setExpandNcId={setExpandNcId} /></PageErrorBoundary>;
       case "notification":   return <NotificationTab instruments={instruments} documents={documents} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} />;
       case "aiworkbench":    return <AIWorkbenchTab documents={documents} manuals={manuals} nonConformances={nonConformances} />;
       case "report":         return <ReportTab instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} />;
-      default:               return <DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setActiveTab} />;
+      default:               return <DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setTabSafe} />;
     }
   }
 
+  const roleColors = { qms:"#3b82f6", executive:"#8b5cf6", supervisor:"#f59e0b", auditor:"#22c55e" };
+  const roleColor = roleColors[userRole] || "#64748b";
+
   return (
-    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at top left, rgba(14,165,233,0.08), transparent 26%), linear-gradient(135deg, #08101f 0%, #0b1220 45%, #080d18 100%)", color: "#e2e8f0", fontFamily: "'Noto Sans TC', sans-serif" }}>
-      <div style={{ position: "sticky", top: 0, zIndex: 20, background: "rgba(8,15,30,0.88)", borderBottom: "1px solid rgba(148,163,184,0.12)", backdropFilter: "blur(16px)", padding: "0 24px", boxShadow: "0 10px 30px rgba(2,6,23,0.18)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 18, overflowX: "auto" }}>
-          <div style={{ padding: "14px 0", minWidth: 170 }}>
-            <div style={{ fontSize: 11, letterSpacing: 1.4, textTransform: "uppercase", color: "#7dd3fc", fontWeight: 800 }}>Jepei QMS</div>
-            <div style={{ fontSize: 15, color: "#e2e8f0", fontWeight: 800, marginTop: 4 }}>品質稽核工作台</div>
+    <ThemeContext.Provider value={theme}>
+    <div style={{ minHeight:"100vh", background: theme.rootBg, color: theme.rootColor, fontFamily:"'Noto Sans TC', sans-serif", transition:"background 0.3s, color 0.3s" }}>
+      {showChangePw && <ChangePasswordModal token={localStorage.getItem("qms_token")} onClose={() => setShowChangePw(false)} />}
+      <div style={{ position:"sticky", top:0, zIndex:20, background: theme.navBg, borderBottom:`1px solid ${theme.panelBorder}`, backdropFilter:"blur(16px)", padding:"0 24px", boxShadow:"0 10px 30px rgba(2,6,23,0.12)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:18, overflowX:"auto" }}>
+          <div style={{ padding:"14px 0", minWidth:170, flexShrink:0 }}>
+            <div style={{ fontSize:11, letterSpacing:1.4, textTransform:"uppercase", color: darkMode ? "#7dd3fc" : "#0284c7", fontWeight:800 }}>Jepei QMS</div>
+            <div style={{ fontSize:15, color: theme.text, fontWeight:800, marginTop:4 }}>品質稽核工作台</div>
           </div>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
-              background: activeTab === t.id ? "rgba(56,189,248,0.14)" : "transparent",
-              border: activeTab === t.id ? "1px solid rgba(56,189,248,0.28)" : "1px solid transparent",
-              cursor: "pointer",
-              padding: "10px 14px",
-              fontSize: 12,
-              fontWeight: 700,
-              color: activeTab === t.id ? "#dbeafe" : "#94a3b8",
-              borderRadius: 12,
-              whiteSpace: "nowrap",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              transition: "all 0.2s ease",
-              margin: "10px 0",
+              background: activeTab === t.id ? (darkMode ? "rgba(56,189,248,0.14)" : "rgba(2,132,199,0.1)") : "transparent",
+              border: activeTab === t.id ? (darkMode ? "1px solid rgba(56,189,248,0.28)" : "1px solid rgba(2,132,199,0.3)") : "1px solid transparent",
+              cursor:"pointer", padding:"10px 14px", fontSize:12, fontWeight:700,
+              color: activeTab === t.id ? (darkMode ? "#dbeafe" : "#0369a1") : theme.textMuted,
+              borderRadius:12, whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:8,
+              transition:"all 0.2s ease", margin:"10px 0",
             }}>
-              <span style={{ fontSize: 12, minWidth: 24, height: 24, display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 999, background: activeTab === t.id ? "rgba(59,130,246,0.18)" : "rgba(255,255,255,0.06)" }}>{t.icon}</span>
+              <span style={{ fontSize:12, minWidth:24, height:24, display:"inline-flex", alignItems:"center", justifyContent:"center", borderRadius:999, background: activeTab === t.id ? "rgba(59,130,246,0.18)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)") }}>{t.icon}</span>
               <span>{t.label}</span>
             </button>
           ))}
+          {/* 使用者資訊 + 切換主題 + 登出 */}
+          <div style={{ marginLeft:"auto", flexShrink:0, display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 12px", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border:`1px solid ${roleColor}30`, borderRadius:10 }}>
+              <div style={{ width:7, height:7, borderRadius:"50%", background:roleColor }} />
+              <div style={{ fontSize:12, color: theme.textMuted }}>{authUser.display}</div>
+            </div>
+            {/* 主題切換按鈕 */}
+            <button onClick={toggleTheme} title={darkMode ? "切換為淺色模式" : "切換為深色模式"}
+              style={{ background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", border:`1px solid ${theme.panelBorder}`, borderRadius:8, padding:"6px 10px", fontSize:14, color: theme.textMuted, cursor:"pointer", lineHeight:1, transition:"all 0.2s" }}>
+              {darkMode ? "☀️" : "🌙"}
+            </button>
+            <button onClick={() => setShowChangePw(true)}
+              style={{ background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border:`1px solid ${theme.panelBorder}`, borderRadius:8, padding:"6px 10px", fontSize:11, color: theme.textMuted, cursor:"pointer" }}>
+              改密碼
+            </button>
+            <button onClick={handleLogout}
+              style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)", borderRadius:8, padding:"6px 12px", fontSize:12, fontWeight:600, color:"#fca5a5", cursor:"pointer" }}>
+              登出
+            </button>
+          </div>
         </div>
       </div>
-      <div style={{ maxWidth: 1460, margin: "0 auto", padding: "28px 24px 40px" }}>
+      <div style={{ maxWidth:1460, margin:"0 auto", padding:"28px 24px 40px" }}>
         {renderTab()}
       </div>
     </div>
+    </ThemeContext.Provider>
   );
 }
 
