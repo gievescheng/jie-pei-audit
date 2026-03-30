@@ -5078,6 +5078,39 @@ function SpcTab({ prodRecords }) {
         </>
       )}
 
+      {/* ── 跨批次 Cpk 趨勢圖 ── */}
+      {history.length >= 2 && panel(<>
+        <div style={{ fontSize:13, fontWeight:700, color:"#e2e8f0", marginBottom:14 }}>跨批次 Cpk 趨勢（近 {Math.min(history.length,20)} 批）</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+          {[
+            { key:"thickness_cpk", label:"Thickness Cpk", color:"#38bdf8" },
+            { key:"ttv_cpk",       label:"TTV Cpk",       color:"#a78bfa" },
+          ].map(({ key, label, color }) => {
+            const pts = [...history].reverse().slice(0, 20)
+              .filter(h => h[key] != null)
+              .map((h, i) => ({ label: String(i + 1), value: h[key] }));
+            return (
+              <div key={key}>
+                <div style={{ fontSize:11, color:"#64748b", marginBottom:6, fontWeight:600 }}>{label}</div>
+                {pts.length >= 2
+                  ? <SvgLineChart data={pts} color={color} domainMin={0} domainMax={Math.max(2, ...pts.map(p => p.value)) * 1.1} />
+                  : <div style={{ fontSize:11, color:"#475569" }}>需 2 筆以上</div>
+                }
+                {/* 目標線說明 */}
+                <div style={{ display:"flex", gap:12, marginTop:4 }}>
+                  {[{v:1.33,c:"#22c55e",t:"A（≥1.33）"},{v:1.00,c:"#f59e0b",t:"B（≥1.00）"}].map(g => (
+                    <div key={g.v} style={{ display:"flex", alignItems:"center", gap:4 }}>
+                      <div style={{ width:12, height:2, background:g.c, borderRadius:1 }} />
+                      <span style={{ fontSize:9, color:"#475569" }}>{g.t}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </>, { marginBottom:16 })}
+
       {/* ── 歷史記錄 ── */}
       {panel(<>
         <div style={{ fontSize:13, fontWeight:700, color:"#e2e8f0", marginBottom:14 }}>近期分析記錄</div>
