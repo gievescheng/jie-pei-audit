@@ -15,6 +15,11 @@ from pypdf import PdfReader
 from werkzeug.utils import secure_filename
 
 from runtime_paths import PRIVATE_DATA_DIR
+from pdf_structured_parser import (
+    extract_pdf_text as _odl_extract_text,
+    is_available as _odl_available,
+    PdfExtractionError,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -532,7 +537,8 @@ def _extract_dates(text: str) -> list[str]:
     return values
 
 
-def _flatten_pdf(path: Path) -> str:
+def _flatten_pdf_pypdf(path: Path) -> str:
+    """pypdf 原生抽取（作為 fallback）。"""
     reader = PdfReader(str(path))
     parts = []
     for page in reader.pages:
@@ -540,6 +546,23 @@ def _flatten_pdf(path: Path) -> str:
         if text:
             parts.append(text)
     return "\n".join(parts)
+
+
+def _flatten_pdf(path: Path) -> str:
+    """
+    PDF → 純文字。
+    優先使用 opendataloader-pdf（閱讀順序更準、表格更穩定）；
+    若環境不支援或解析失敗，自動 fallback 到 pypdf。
+    """
+    if _odl_available():
+        try:
+            return _odl_extract_text(path)
+        except PdfExtractionError as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "opendataloader-pdf 失敗，改用 pypdf fallback：%s", exc
+            )
+    return _flatten_pdf_pypdf(path)
 
 
 def _flatten_xlsx(path: Path) -> str:
