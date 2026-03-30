@@ -570,15 +570,53 @@ function collectNotificationItems({ instruments, documents, equipment, suppliers
 }
 
 // ─── SHARED COMPONENTS ────────────────────────────────────────────────────────
-const uiTheme = {
+const DARK_THEME = {
+  isDark: true,
   panel: "linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(15,23,42,0.78) 100%)",
+  panelSolid: "#0f172a",
   panelSoft: "rgba(255,255,255,0.035)",
   panelBorder: "rgba(148,163,184,0.16)",
   text: "#e2e8f0",
   textMuted: "#94a3b8",
   textSoft: "#64748b",
   shadow: "0 24px 60px rgba(2, 6, 23, 0.28)",
+  navBg: "rgba(8,15,30,0.88)",
+  rootBg: "radial-gradient(circle at top left, rgba(14,165,233,0.08), transparent 26%), linear-gradient(135deg, #08101f 0%, #0b1220 45%, #080d18 100%)",
+  rootColor: "#e2e8f0",
+  inputBg: "rgba(255,255,255,0.05)",
+  inputBorder: "rgba(148,163,184,0.18)",
+  inputColor: "#e2e8f0",
+  modalBg: "#162033",
+  modalBorder: "rgba(148,163,184,0.18)",
 };
+
+const LIGHT_THEME = {
+  isDark: false,
+  panel: "linear-gradient(180deg, rgba(255,255,255,0.97) 0%, rgba(248,250,252,0.92) 100%)",
+  panelSolid: "#ffffff",
+  panelSoft: "rgba(0,0,0,0.025)",
+  panelBorder: "rgba(15,23,42,0.1)",
+  text: "#0f172a",
+  textMuted: "#475569",
+  textSoft: "#94a3b8",
+  shadow: "0 24px 60px rgba(15, 23, 42, 0.08)",
+  navBg: "rgba(248,250,252,0.92)",
+  rootBg: "radial-gradient(circle at top left, rgba(14,165,233,0.05), transparent 26%), linear-gradient(135deg, #f1f5f9 0%, #f8fafc 45%, #e8f0fe 100%)",
+  rootColor: "#0f172a",
+  inputBg: "rgba(15,23,42,0.04)",
+  inputBorder: "rgba(15,23,42,0.14)",
+  inputColor: "#0f172a",
+  modalBg: "#ffffff",
+  modalBorder: "rgba(15,23,42,0.12)",
+};
+
+const ThemeContext = React.createContext(DARK_THEME);
+
+// 便利 hook：任何元件皆可取用目前主題
+function useTheme() { return React.useContext(ThemeContext); }
+
+// 向下相容：若元件直接參照 uiTheme，改用此 proxy（請逐步遷移到 useTheme()）
+const uiTheme = DARK_THEME; // 僅供靜態參照用，動態元件應使用 useTheme()
 
 function buttonStyle(variant = "secondary", disabled = false) {
   const map = {
@@ -648,20 +686,23 @@ const tableRowCellStyle = {
 };
 
 function PageIntro({ eyebrow, title, description, actions, children }) {
+  const th = useTheme();
   return (
     <div style={{
-      background: "linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.72) 100%)",
-      border: "1px solid rgba(148,163,184,0.16)",
+      background: th.isDark
+        ? "linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.72) 100%)"
+        : "linear-gradient(180deg, rgba(255,255,255,0.97) 0%, rgba(241,245,249,0.88) 100%)",
+      border: "1px solid " + th.panelBorder,
       borderRadius: 20,
       padding: 24,
       marginBottom: 20,
-      boxShadow: uiTheme.shadow,
+      boxShadow: th.shadow,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ minWidth: 280, flex: 1 }}>
-          {eyebrow && <div style={{ fontSize: 11, letterSpacing: 1.4, textTransform: "uppercase", color: "#7dd3fc", fontWeight: 800, marginBottom: 10 }}>{eyebrow}</div>}
-          <div style={{ fontSize: 28, lineHeight: 1.1, fontWeight: 800, color: uiTheme.text }}>{title}</div>
-          {description && <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.8, color: uiTheme.textMuted, maxWidth: 760 }}>{description}</div>}
+          {eyebrow && <div style={{ fontSize: 11, letterSpacing: 1.4, textTransform: "uppercase", color: th.isDark ? "#7dd3fc" : "#0284c7", fontWeight: 800, marginBottom: 10 }}>{eyebrow}</div>}
+          <div style={{ fontSize: 28, lineHeight: 1.1, fontWeight: 800, color: th.text }}>{title}</div>
+          {description && <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.8, color: th.textMuted, maxWidth: 760 }}>{description}</div>}
         </div>
         {actions && <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>{actions}</div>}
       </div>
@@ -671,22 +712,23 @@ function PageIntro({ eyebrow, title, description, actions, children }) {
 }
 
 function Panel({ title, description, actions, accent = "#60a5fa", children, style = {} }) {
+  const th = useTheme();
   return (
     <div style={{
-      background: uiTheme.panel,
+      background: th.panel,
       border: `1px solid ${accent}28`,
       borderRadius: 18,
       padding: 20,
-      boxShadow: uiTheme.shadow,
+      boxShadow: th.shadow,
       ...style,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 14 }}>
         <div style={{ minWidth: 220, flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
             <div style={{ width: 10, height: 10, borderRadius: 999, background: accent, boxShadow: `0 0 0 6px ${accent}18` }} />
-            <div style={{ fontSize: 16, fontWeight: 800, color: uiTheme.text }}>{title}</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: th.text }}>{title}</div>
           </div>
-          {description && <div style={{ fontSize: 12, color: uiTheme.textMuted, lineHeight: 1.7 }}>{description}</div>}
+          {description && <div style={{ fontSize: 12, color: th.textMuted, lineHeight: 1.7 }}>{description}</div>}
         </div>
         {actions && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div>}
       </div>
@@ -762,29 +804,31 @@ class PageErrorBoundary extends React.Component {
 }
 
 function StatCard({ label, value, color, sub }) {
+  const th = useTheme();
   return (
     <div style={{
-      background: uiTheme.panel,
-      border: "1px solid " + uiTheme.panelBorder,
+      background: th.panel,
+      border: "1px solid " + th.panelBorder,
       borderRadius: 18,
       padding: "22px 24px",
       flex: 1,
       minWidth: 150,
       borderTop: `3px solid ${color}`,
-      boxShadow: uiTheme.shadow,
+      boxShadow: th.shadow,
     }}>
       <div style={{ fontSize: 32, fontWeight: 800, color, fontFamily: "'DM Mono', monospace", lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 13, color: uiTheme.textMuted, marginTop: 8, fontWeight: 700 }}>{label}</div>
-      {sub && <div style={{ fontSize: 11, color: uiTheme.textSoft, marginTop: 6, lineHeight: 1.6 }}>{sub}</div>}
+      <div style={{ fontSize: 13, color: th.textMuted, marginTop: 8, fontWeight: 700 }}>{label}</div>
+      {sub && <div style={{ fontSize: 11, color: th.textSoft, marginTop: 6, lineHeight: 1.6 }}>{sub}</div>}
     </div>
   );
 }
 
 function SectionHeader({ title, count, color = "#60a5fa" }) {
+  const th = useTheme();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
       <div style={{ width: 5, height: 22, background: color, borderRadius: 3 }} />
-      <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: uiTheme.text }}>{title}</h2>
+      <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: th.text }}>{title}</h2>
       {count !== undefined && (
         <span style={{ background: color + "18", color, borderRadius: 99, padding: "3px 10px", fontSize: 12, fontWeight: 700, border: `1px solid ${color}33` }}>{count}</span>
       )}
@@ -793,21 +837,23 @@ function SectionHeader({ title, count, color = "#60a5fa" }) {
 }
 
 function Modal({ title, onClose, children }) {
+  const th = useTheme();
   return (
     <div style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000,
       display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
     }} onClick={onClose}>
       <div style={{
-        background: "#162033", borderRadius: 20, padding: 32, maxWidth: 700, width: "100%",
-        maxHeight: "85vh", overflow: "auto", border: "1px solid rgba(148,163,184,0.18)",
+        background: th.modalBg, borderRadius: 20, padding: 32, maxWidth: 700, width: "100%",
+        maxHeight: "85vh", overflow: "auto", border: "1px solid " + th.modalBorder,
         boxShadow: "0 32px 80px rgba(0,0,0,0.6)",
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-          <h3 style={{ margin: 0, fontSize: 18, color: uiTheme.text, fontWeight: 800 }}>{title}</h3>
+          <h3 style={{ margin: 0, fontSize: 18, color: th.text, fontWeight: 800 }}>{title}</h3>
           <button onClick={onClose} style={{
-            background: "rgba(255,255,255,0.08)", border: "1px solid rgba(148,163,184,0.14)", borderRadius: 10,
-            color: uiTheme.textMuted, cursor: "pointer", padding: "8px 14px", fontSize: 13, fontWeight: 700,
+            background: th.isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+            border: "1px solid " + th.panelBorder, borderRadius: 10,
+            color: th.textMuted, cursor: "pointer", padding: "8px 14px", fontSize: 13, fontWeight: 700,
           }}>✕ 關閉</button>
         </div>
         {children}
@@ -4513,6 +4559,30 @@ function IsoProcedureBundle({ bundle, showPaths = false }) {
   );
 }
 
+function DocumentsManagerDetails({ documents, setDocuments }) {
+  const th = useTheme();
+  return (
+    <details style={{ background: th.panel, border:"1px solid " + th.panelBorder, borderRadius:18, padding:18, boxShadow: th.shadow }}>
+      <summary style={{ cursor:"pointer", fontSize:14, fontWeight:700, color: th.text }}>進階管理：原始文件清單、上傳與編修</summary>
+      <div style={{ marginTop:18 }}>
+        <DocumentsTab documents={documents} setDocuments={setDocuments} />
+      </div>
+    </details>
+  );
+}
+
+function LibraryDetailsPanel({ documents, manuals }) {
+  const th = useTheme();
+  return (
+    <details style={{ background: th.panel, border:"1px solid " + th.panelBorder, borderRadius:18, padding:18, boxShadow: th.shadow }}>
+      <summary style={{ cursor:"pointer", fontSize:14, fontWeight:700, color: th.text }}>原始文件庫視圖</summary>
+      <div style={{ marginTop:18 }}>
+        <LibraryTab documents={documents} manuals={manuals} />
+      </div>
+    </details>
+  );
+}
+
 function DocumentsManagerTab({ documents, setDocuments, manuals }) {
   const iso = buildIsoDocumentMap(documents, manuals);
 
@@ -4560,12 +4630,7 @@ function DocumentsManagerTab({ documents, setDocuments, manuals }) {
           </div>
         </Panel>
 
-        <details style={{ background:uiTheme.panel, border:"1px solid " + uiTheme.panelBorder, borderRadius:18, padding:18, boxShadow: uiTheme.shadow }}>
-          <summary style={{ cursor:"pointer", fontSize:14, fontWeight:700, color:"#e2e8f0" }}>進階管理：原始文件清單、上傳與編修</summary>
-          <div style={{ marginTop:18 }}>
-            <DocumentsTab documents={documents} setDocuments={setDocuments} />
-          </div>
-        </details>
+        <DocumentsManagerDetails documents={documents} setDocuments={setDocuments} />
       </div>
     </div>
   );
@@ -4636,12 +4701,7 @@ function LibraryHierarchyTab({ documents, manuals }) {
           <div style={{ textAlign:"center", padding:"36px 20px", color:"#64748b", fontSize:14 }}>沒有符合篩選條件的文件。</div>
         )}
 
-        <details style={{ background:uiTheme.panel, border:"1px solid " + uiTheme.panelBorder, borderRadius:18, padding:18, boxShadow: uiTheme.shadow }}>
-          <summary style={{ cursor:"pointer", fontSize:14, fontWeight:700, color:"#e2e8f0" }}>原始文件庫視圖</summary>
-          <div style={{ marginTop:18 }}>
-            <LibraryTab documents={documents} manuals={manuals} />
-          </div>
-        </details>
+        <LibraryDetailsPanel documents={documents} manuals={manuals} />
       </div>
     </div>
   );
@@ -5139,6 +5199,13 @@ function SpcTab({ prodRecords }) {
                     <div style={{ fontSize:13, fontWeight:700, color:vColor }}>{vCpk != null ? vCpk.toFixed(2) : "–"}</div>
                   </div>
                   {h.needs_attention && <span style={{ fontSize:11, color:"#ef4444", alignSelf:"center" }}>⚠ 異常</span>}
+                  {h.has_raw_rows && (
+                    <a href={`/api/spc/fosb?batch_id=${encodeURIComponent(h.batch_id)}`}
+                      download onClick={e => e.stopPropagation()}
+                      style={{ fontSize:11, color:"#7dd3fc", background:"rgba(56,189,248,0.08)", border:"1px solid rgba(56,189,248,0.2)", borderRadius:6, padding:"3px 8px", textDecoration:"none", alignSelf:"center", whiteSpace:"nowrap" }}>
+                      ↓ FOSB
+                    </a>
+                  )}
                 </div>
               </div>
             );
@@ -5744,6 +5811,19 @@ function ChangePasswordModal({ token, onClose }) {
 
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
 export default function App() {
+  // ── 主題狀態（深色/淺色）────────────────────────────────────
+  const [darkMode, setDarkMode] = useState(() => {
+    try { return localStorage.getItem("qms_theme") !== "light"; } catch { return true; }
+  });
+  function toggleTheme() {
+    setDarkMode(d => {
+      const next = !d;
+      try { localStorage.setItem("qms_theme", next ? "dark" : "light"); } catch {}
+      return next;
+    });
+  }
+  const theme = darkMode ? DARK_THEME : LIGHT_THEME;
+
   // ── 身份驗證狀態 ──────────────────────────────────────────────
   const [authUser, setAuthUser] = useState(() => {
     try {
@@ -5776,7 +5856,11 @@ export default function App() {
   }
 
   // ── 未登入 → 顯示登入畫面 ────────────────────────────────────
-  if (!authUser) return <LoginScreen onLogin={handleLogin} />;
+  if (!authUser) return (
+    <ThemeContext.Provider value={theme}>
+      <LoginScreen onLogin={handleLogin} />
+    </ThemeContext.Provider>
+  );
 
   const userRole = authUser.role || "qms";
   const allowedTabs = ROLE_TABS[userRole] || ROLE_TABS.qms;
@@ -5874,35 +5958,41 @@ export default function App() {
   const roleColor = roleColors[userRole] || "#64748b";
 
   return (
-    <div style={{ minHeight:"100vh", background:"radial-gradient(circle at top left, rgba(14,165,233,0.08), transparent 26%), linear-gradient(135deg, #08101f 0%, #0b1220 45%, #080d18 100%)", color:"#e2e8f0", fontFamily:"'Noto Sans TC', sans-serif" }}>
+    <ThemeContext.Provider value={theme}>
+    <div style={{ minHeight:"100vh", background: theme.rootBg, color: theme.rootColor, fontFamily:"'Noto Sans TC', sans-serif", transition:"background 0.3s, color 0.3s" }}>
       {showChangePw && <ChangePasswordModal token={localStorage.getItem("qms_token")} onClose={() => setShowChangePw(false)} />}
-      <div style={{ position:"sticky", top:0, zIndex:20, background:"rgba(8,15,30,0.88)", borderBottom:"1px solid rgba(148,163,184,0.12)", backdropFilter:"blur(16px)", padding:"0 24px", boxShadow:"0 10px 30px rgba(2,6,23,0.18)" }}>
+      <div style={{ position:"sticky", top:0, zIndex:20, background: theme.navBg, borderBottom:`1px solid ${theme.panelBorder}`, backdropFilter:"blur(16px)", padding:"0 24px", boxShadow:"0 10px 30px rgba(2,6,23,0.12)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:18, overflowX:"auto" }}>
           <div style={{ padding:"14px 0", minWidth:170, flexShrink:0 }}>
-            <div style={{ fontSize:11, letterSpacing:1.4, textTransform:"uppercase", color:"#7dd3fc", fontWeight:800 }}>Jepei QMS</div>
-            <div style={{ fontSize:15, color:"#e2e8f0", fontWeight:800, marginTop:4 }}>品質稽核工作台</div>
+            <div style={{ fontSize:11, letterSpacing:1.4, textTransform:"uppercase", color: darkMode ? "#7dd3fc" : "#0284c7", fontWeight:800 }}>Jepei QMS</div>
+            <div style={{ fontSize:15, color: theme.text, fontWeight:800, marginTop:4 }}>品質稽核工作台</div>
           </div>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
-              background: activeTab === t.id ? "rgba(56,189,248,0.14)" : "transparent",
-              border: activeTab === t.id ? "1px solid rgba(56,189,248,0.28)" : "1px solid transparent",
+              background: activeTab === t.id ? (darkMode ? "rgba(56,189,248,0.14)" : "rgba(2,132,199,0.1)") : "transparent",
+              border: activeTab === t.id ? (darkMode ? "1px solid rgba(56,189,248,0.28)" : "1px solid rgba(2,132,199,0.3)") : "1px solid transparent",
               cursor:"pointer", padding:"10px 14px", fontSize:12, fontWeight:700,
-              color: activeTab === t.id ? "#dbeafe" : "#94a3b8",
+              color: activeTab === t.id ? (darkMode ? "#dbeafe" : "#0369a1") : theme.textMuted,
               borderRadius:12, whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:8,
               transition:"all 0.2s ease", margin:"10px 0",
             }}>
-              <span style={{ fontSize:12, minWidth:24, height:24, display:"inline-flex", alignItems:"center", justifyContent:"center", borderRadius:999, background: activeTab === t.id ? "rgba(59,130,246,0.18)" : "rgba(255,255,255,0.06)" }}>{t.icon}</span>
+              <span style={{ fontSize:12, minWidth:24, height:24, display:"inline-flex", alignItems:"center", justifyContent:"center", borderRadius:999, background: activeTab === t.id ? "rgba(59,130,246,0.18)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)") }}>{t.icon}</span>
               <span>{t.label}</span>
             </button>
           ))}
-          {/* 使用者資訊 + 登出 */}
+          {/* 使用者資訊 + 切換主題 + 登出 */}
           <div style={{ marginLeft:"auto", flexShrink:0, display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 12px", background:"rgba(255,255,255,0.04)", border:`1px solid ${roleColor}30`, borderRadius:10 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 12px", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border:`1px solid ${roleColor}30`, borderRadius:10 }}>
               <div style={{ width:7, height:7, borderRadius:"50%", background:roleColor }} />
-              <div style={{ fontSize:12, color:"#94a3b8" }}>{authUser.display}</div>
+              <div style={{ fontSize:12, color: theme.textMuted }}>{authUser.display}</div>
             </div>
+            {/* 主題切換按鈕 */}
+            <button onClick={toggleTheme} title={darkMode ? "切換為淺色模式" : "切換為深色模式"}
+              style={{ background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", border:`1px solid ${theme.panelBorder}`, borderRadius:8, padding:"6px 10px", fontSize:14, color: theme.textMuted, cursor:"pointer", lineHeight:1, transition:"all 0.2s" }}>
+              {darkMode ? "☀️" : "🌙"}
+            </button>
             <button onClick={() => setShowChangePw(true)}
-              style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, padding:"6px 10px", fontSize:11, color:"#64748b", cursor:"pointer" }}>
+              style={{ background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border:`1px solid ${theme.panelBorder}`, borderRadius:8, padding:"6px 10px", fontSize:11, color: theme.textMuted, cursor:"pointer" }}>
               改密碼
             </button>
             <button onClick={handleLogout}
@@ -5916,6 +6006,7 @@ export default function App() {
         {renderTab()}
       </div>
     </div>
+    </ThemeContext.Provider>
   );
 }
 
