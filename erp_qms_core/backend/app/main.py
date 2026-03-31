@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-from .api import router
+from .api.v1.router import router
 
-
-app = FastAPI(title="JEPE ERP-QMS Core", version="0.1.0")
+app = FastAPI(title="JEPE ERP-QMS Core", version="0.2.0")
 app.include_router(router)
