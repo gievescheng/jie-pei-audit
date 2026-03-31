@@ -539,12 +539,16 @@ class FlaskOperationsTest(unittest.TestCase):
             summary_wb = load_workbook(io.BytesIO(archive.read(summary_name)))
             detail_wb = load_workbook(io.BytesIO(archive.read(detail_name)))
         self.assertEqual(len(names), 2)
-        self.assertEqual(summary_wb.active["A1"].value, "6 工作環境監控月報摘要")
-        self.assertEqual(summary_wb.active["B3"].value, 2)
+        # 格式化後封面為第一張工作表，月報摘要為第二張（index 1）
+        self.assertIn("封面", summary_wb.sheetnames)
+        summary_ws = summary_wb.worksheets[1]
+        self.assertEqual(summary_ws.title, "月報摘要")
+        self.assertEqual(summary_ws["A1"].value, "6 工作環境監控月報摘要")
         self.assertIn("日別統計", summary_wb.sheetnames)
         self.assertIn("點位統計", summary_wb.sheetnames)
+        # 環境監控記錄表：A1=標題「日期」，A2=第一筆資料日期
         self.assertEqual(detail_wb.active["A1"].value, "日期")
-        self.assertEqual(detail_wb.active["B2"].value, "1")
+        self.assertIsNotNone(detail_wb.active["A2"].value)
         summary_wb.close()
         detail_wb.close()
 

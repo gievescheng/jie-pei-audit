@@ -26,3 +26,19 @@ SHIPMENT_TRANSITIONS: dict[str, set[str]] = {
     ShipmentStatus.CONFIRMED: set(),
     ShipmentStatus.CANCELLED: set(),
 }
+
+_TABLE: dict[str, dict[str, set[str]]] = {
+    "sales_order": SALES_ORDER_TRANSITIONS,
+    "work_order":  WORK_ORDER_TRANSITIONS,
+    "shipment":    SHIPMENT_TRANSITIONS,
+}
+
+
+def can_transition(entity_type: str, current: str, next_status: str) -> bool:
+    """Return True if moving from *current* to *next_status* is allowed."""
+    return next_status in _TABLE.get(entity_type, {}).get(current, set())
+
+
+def allowed_next(entity_type: str, current: str) -> set[str]:
+    """Return the set of valid next states for a given entity and current status."""
+    return set(_TABLE.get(entity_type, {}).get(current, set()))

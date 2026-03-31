@@ -5922,22 +5922,12 @@ export default function App() {
     setAuthUser(null);
   }
 
-  // ── 未登入 → 顯示登入畫面 ────────────────────────────────────
-  if (!authUser) return (
-    <ThemeContext.Provider value={theme}>
-      <LoginScreen onLogin={handleLogin} />
-    </ThemeContext.Provider>
-  );
-
-  const userRole = authUser.role || "qms";
-  const allowedTabs = ROLE_TABS[userRole] || ROLE_TABS.qms;
-
-  // ── 主應用狀態 ────────────────────────────────────────────────
+  // ── 主應用狀態（必須在所有提前 return 之前宣告）─────────────────
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window === "undefined") return "home";
     const params = new URLSearchParams(window.location.search);
     const t = params.get("google") ? "notification" : (params.get("tab") || "home");
-    return allowedTabs.includes(t) ? t : "home";
+    return t || "home";
   });
   const [instruments, setInstruments] = useState(initialInstruments);
   const [documents, setDocuments] = useState(initialDocuments);
@@ -5957,6 +5947,7 @@ export default function App() {
   useEffect(() => saveStoredState("audit_qualityrecords", qualityRecords), [qualityRecords]);
 
   useEffect(() => {
+    if (!authUser) return;
     let cancelled = false;
     async function loadOpsData() {
       try {
@@ -5975,7 +5966,17 @@ export default function App() {
     }
     loadOpsData();
     return () => { cancelled = true; };
-  }, []);
+  }, [authUser]);
+
+  // ── 未登入 → 顯示登入畫面 ────────────────────────────────────
+  if (!authUser) return (
+    <ThemeContext.Provider value={theme}>
+      <LoginScreen onLogin={handleLogin} />
+    </ThemeContext.Provider>
+  );
+
+  const userRole = authUser.role || "qms";
+  const allowedTabs = ROLE_TABS[userRole] || ROLE_TABS.qms;
 
   const allTabs = [
     { id: "home",           label: "主控台",     icon: "⌂" },
