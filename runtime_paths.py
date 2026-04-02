@@ -15,6 +15,9 @@ PRIVATE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 PRIVATE_DATA_DIR = (PRIVATE_CONFIG_DIR / "data").resolve()
 PRIVATE_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+LOG_DIR = (PRIVATE_CONFIG_DIR / "logs").resolve()
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 V2_RUNTIME_CONFIG_PATH = PRIVATE_CONFIG_DIR / "v2_runtime.json"
 GOOGLE_CONFIG_PATH = PRIVATE_CONFIG_DIR / "google_calendar_config.json"
 GOOGLE_TOKEN_PATH = PRIVATE_CONFIG_DIR / "google_calendar_tokens.json"

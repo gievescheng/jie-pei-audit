@@ -25,82 +25,26 @@ from pdf_structured_parser import (
 BASE_DIR = Path(__file__).resolve().parent
 _STORAGE_ROOT = (PRIVATE_DATA_DIR / "operations").resolve()
 _UPLOAD_ROOT = (_STORAGE_ROOT / "uploads").resolve()
+_SEED_PATH = PRIVATE_DATA_DIR / "seed_data.json"
 
-DEFAULT_NONCONFORMANCES = [
-    {
-        "id": "NC-2025-001",
-        "date": "2025-11-12",
-        "dept": "品管課",
-        "type": "人員作業",
-        "description": "在品檢室進行作業時，不慎撞到已洗完待檢測的玻璃，導致掉落地板破裂。",
-        "severity": "輕微",
-        "rootCause": "品管作業員在作業時不慎撞到 FOSB 盒，導致盒子掉落並摔破玻璃片。",
-        "correctiveAction": "作業員立即清理現場並確認無玻璃碎片殘留，另行包裝破碎玻璃片至包裝袋並隔離儲存；主管提醒作業員注意各物品擺放。",
-        "responsible": "林佑翰",
-        "dueDate": "",
-        "status": "已關閉",
-        "closeDate": "2025-11-12",
-        "effectiveness": "有效",
-        "source_file": "",
-    },
-    {
-        "id": "NC-2026-001",
-        "date": "2026-01-28",
-        "dept": "品檢課",
-        "type": "人員作業",
-        "description": "品檢人員於 AOI 檢驗後取出 NG 品放置 FOSB，中途玻璃脫落導致破片。",
-        "severity": "輕微",
-        "rootCause": "AOI 測試判定 NG 後，取出放置 NG FOSB 時操作不慎，玻璃脫落破片。",
-        "correctiveAction": "加強作業員操作訓練，明確規範 FOSB 取放動作要領，並更新作業 SOP。",
-        "responsible": "朱姿霖",
-        "dueDate": "",
-        "status": "處理中",
-        "closeDate": "",
-        "effectiveness": "",
-        "source_file": "",
-    },
-]
 
-DEFAULT_AUDIT_PLANS = [
-    {
-        "id": "IA-2025-01",
-        "year": 2025,
-        "period": "下半年",
-        "scheduledDate": "2025-09-04",
-        "dept": "全廠",
-        "scope": "MP-01,MP-02,MP-03,MP-04,MP-05,MP-06",
-        "auditor": "蔡有為",
-        "auditee": "程鼎智",
-        "status": "已完成",
-        "actualDate": "2025-09-05",
-        "findings": 4,
-        "ncCount": 1,
-        "source_file": "",
-        "attachment_paths": [
-            "9 內部稽核管理程序/記錄/內部稽核114年度/9.5 品質稽核報告書.docx",
-            "9 內部稽核管理程序/記錄/內部稽核114年度/9.3 內部稽核查檢表.xlsx",
-        ],
-    },
-    {
-        "id": "IA-2025-02",
-        "year": 2025,
-        "period": "上半年",
-        "scheduledDate": "2025-06-23",
-        "dept": "品管課",
-        "scope": "MP-11,MP-13",
-        "auditor": "蔡有為",
-        "auditee": "程鼎智",
-        "status": "已完成",
-        "actualDate": "2025-06-23",
-        "findings": 1,
-        "ncCount": 1,
-        "source_file": "",
-        "attachment_paths": [
-            "9 內部稽核管理程序/記錄/內部稽核114年度/9.4內部稽核矯正通知單.docx",
-            "9 內部稽核管理程序/表單/9.1 內部稽核計畫表.DOCx",
-        ],
-    },
-]
+def _load_seed(key: str) -> list[dict]:
+    """
+    從 AppData/AutoAudit/data/seed_data.json 載入預設資料。
+    seed_data.json 含真實個資/公司資料，不納入 git；
+    若檔案不存在則回傳空列表（系統從零啟動）。
+    """
+    if not _SEED_PATH.exists():
+        return []
+    try:
+        data = json.loads(_SEED_PATH.read_text(encoding="utf-8"))
+        return data.get(key, [])
+    except Exception:
+        return []
+
+
+DEFAULT_NONCONFORMANCES = _load_seed("nonconformances")
+DEFAULT_AUDIT_PLANS = _load_seed("audit_plans")
 
 KIND_META = {
     "nonconformance": {"file": "nonconformances.json", "defaults": DEFAULT_NONCONFORMANCES, "allowed": {".docx", ".xlsx", ".pdf"}},
@@ -123,9 +67,16 @@ def _ensure_dirs() -> None:
         (_UPLOAD_ROOT / kind).mkdir(parents=True, exist_ok=True)
 
 
-def _store_path(kind: str) -> Path:
-    _ensure_dirs()
-    return _STORAGE_ROOT / KIND_META[kind]["file"]
+def _ensure_company_dirs(company_id: str) -> None:
+    company_root = _STORAGE_ROOT / company_id
+    company_root.mkdir(parents=True, exist_ok=True)
+    for kind in KIND_META:
+        (company_root / "uploads" / kind).mkdir(parents=True, exist_ok=True)
+
+
+def _store_path(kind: str, company_id: str = "JEPE") -> Path:
+    _ensure_company_dirs(company_id)
+    return _STORAGE_ROOT / company_id / KIND_META[kind]["file"]
 
 
 def _now_iso() -> str:
@@ -142,7 +93,17 @@ def _read_json(path: Path) -> list[dict]:
 
 
 def _write_json(path: Path, payload: list[dict]) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    """
+    原子寫入：先寫暫存檔，再 rename，避免並發寫入損毀資料。
+    寫入前保留一份 .bak，讓誤操作後可手動恢復。
+    """
+    # 備份現有檔案（覆蓋舊 .bak）
+    if path.exists():
+        path.replace(path.with_suffix(".bak"))
+    # 原子寫入
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)  # os.replace 語意，Windows / Unix 均為原子操作
 
 
 def _parse_date(value) -> str:
@@ -358,31 +319,31 @@ def normalize_record(kind: str, record: dict, items: list[dict]) -> dict:
     return normalized
 
 
-def load_records(kind: str) -> list[dict]:
-    raw = _read_json(_store_path(kind))
+def load_records(kind: str, company_id: str = "JEPE") -> list[dict]:
+    raw = _read_json(_store_path(kind, company_id))
     if not raw:
         defaults = []
         for item in deepcopy(KIND_META[kind]["defaults"]):
             defaults.append(normalize_record(kind, item, defaults))
-        _write_json(_store_path(kind), defaults)
+        _write_json(_store_path(kind, company_id), defaults)
         return defaults
     normalized = []
     for item in raw:
         normalized.append(normalize_record(kind, item, normalized))
-    _write_json(_store_path(kind), normalized)
+    _write_json(_store_path(kind, company_id), normalized)
     return normalized
 
 
-def save_records(kind: str, items: list[dict]) -> list[dict]:
+def save_records(kind: str, items: list[dict], company_id: str = "JEPE") -> list[dict]:
     normalized = []
     for item in items:
         normalized.append(normalize_record(kind, item, normalized))
-    _write_json(_store_path(kind), normalized)
+    _write_json(_store_path(kind, company_id), normalized)
     return normalized
 
 
-def upsert_records(kind: str, records: list[dict], replace_source_file: str = "") -> tuple[list[dict], list[dict]]:
-    items = load_records(kind)
+def upsert_records(kind: str, records: list[dict], replace_source_file: str = "", company_id: str = "JEPE") -> tuple[list[dict], list[dict]]:
+    items = load_records(kind, company_id)
     replace_source_file = str(replace_source_file or "").strip()
     if replace_source_file:
         items = [item for item in items if str(item.get("source_file") or "").strip() != replace_source_file]
@@ -399,20 +360,20 @@ def upsert_records(kind: str, records: list[dict], replace_source_file: str = ""
             normalized["created_at"] = items[index].get("created_at", normalized["created_at"])
             items[index] = normalized
         saved.append(normalized)
-    return save_records(kind, items), saved
+    return save_records(kind, items, company_id), saved
 
 
-def delete_record(kind: str, record_id: str) -> tuple[list[dict], bool]:
-    items = load_records(kind)
+def delete_record(kind: str, record_id: str, company_id: str = "JEPE") -> tuple[list[dict], bool]:
+    items = load_records(kind, company_id)
     kept = [item for item in items if item.get("id") != record_id]
     deleted = len(kept) != len(items)
     if deleted:
-        kept = save_records(kind, kept)
+        kept = save_records(kind, kept, company_id)
     return (kept if deleted else items), deleted
 
 
-def filter_environment_records(start: str = "", end: str = "") -> list[dict]:
-    records = load_records("environment")
+def filter_environment_records(start: str = "", end: str = "", company_id: str = "JEPE") -> list[dict]:
+    records = load_records("environment", company_id)
     start_date = _parse_date(start)
     end_date = _parse_date(end)
     return [
@@ -422,8 +383,8 @@ def filter_environment_records(start: str = "", end: str = "") -> list[dict]:
     ]
 
 
-def delete_environment_range(start: str = "", end: str = "") -> tuple[list[dict], int]:
-    records = load_records("environment")
+def delete_environment_range(start: str = "", end: str = "", company_id: str = "JEPE") -> tuple[list[dict], int]:
+    records = load_records("environment", company_id)
     start_date = _parse_date(start)
     end_date = _parse_date(end)
     kept = []
@@ -443,7 +404,7 @@ def delete_environment_range(start: str = "", end: str = "") -> tuple[list[dict]
         else:
             kept.append(item)
     if start_date or end_date:
-        kept = save_records("environment", kept)
+        kept = save_records("environment", kept, company_id)
     return kept, removed
 
 
@@ -456,16 +417,16 @@ def summarize_environment(records: list[dict]) -> dict:
     }
 
 
-def save_uploaded_file(kind: str, file_storage) -> tuple[Path, str]:
+def save_uploaded_file(kind: str, file_storage, company_id: str = "JEPE") -> tuple[Path, str]:
     ext = Path(file_storage.filename or "").suffix.lower()
     if ext not in KIND_META[kind]["allowed"]:
         raise ValueError(f"Unsupported file type: {ext or 'unknown'}")
-    _ensure_dirs()
-    target_dir = _UPLOAD_ROOT / kind
+    _ensure_company_dirs(company_id)
+    target_dir = _STORAGE_ROOT / company_id / "uploads" / kind
     filename = secure_filename(file_storage.filename or "") or f"upload{ext or '.bin'}"
     target = target_dir / f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{filename}"
     file_storage.save(target)
-    return target, f"uploads/{kind}/{target.name}"
+    return target, f"{company_id}/uploads/{kind}/{target.name}"
 
 
 def _clean_extracted_value(value) -> str:
@@ -1025,8 +986,8 @@ def parse_environment_import(path: Path, stored_ref: str) -> dict:
     return {"records": preview, "summary": summarize_environment(preview), "source_file": stored_ref}
 
 
-def parse_import(kind: str, file_storage) -> dict:
-    saved_path, stored_ref = save_uploaded_file(kind, file_storage)
+def parse_import(kind: str, file_storage, company_id: str = "JEPE") -> dict:
+    saved_path, stored_ref = save_uploaded_file(kind, file_storage, company_id)
     if kind == "nonconformance":
         return parse_nonconformance_import(saved_path, stored_ref)
     if kind == "auditplan":
@@ -1038,7 +999,9 @@ def _resolve_storage_path(stored_path: str) -> Path | None:
     cleaned = str(stored_path or "").strip().replace("\\", "/").lstrip("/")
     if not cleaned or cleaned.startswith("."):
         return None
-    if cleaned.startswith("uploads/"):
+    # Uploaded files: new format "{company_id}/uploads/..." or legacy "uploads/..."
+    # Both resolve from _STORAGE_ROOT
+    if cleaned.startswith("uploads/") or re.match(r"^[A-Za-z0-9_-]+/uploads/", cleaned):
         candidate = (_STORAGE_ROOT / cleaned).resolve()
         root = _STORAGE_ROOT.resolve()
     else:
@@ -1085,8 +1048,8 @@ def build_text_preview_html(stored_path: str) -> str | None:
 </html>"""
 
 
-def list_auditplan_attachments(record_id: str) -> list[dict]:
-    record = next((item for item in load_records("auditplan") if item.get("id") == record_id), None)
+def list_auditplan_attachments(record_id: str, company_id: str = "JEPE") -> list[dict]:
+    record = next((item for item in load_records("auditplan", company_id) if item.get("id") == record_id), None)
     if record is None:
         raise KeyError(record_id)
     seen = set()

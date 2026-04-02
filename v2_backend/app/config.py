@@ -40,6 +40,9 @@ class Settings:
     openrouter_timeout: int = int(os.getenv("OPENROUTER_TIMEOUT") or str(RUNTIME_CONFIG.get("openrouter_timeout") or "45"))
     host: str = os.getenv("V2_HOST") or str(RUNTIME_CONFIG.get("host") or "127.0.0.1")
     port: int = int(os.getenv("V2_PORT") or str(RUNTIME_CONFIG.get("port") or "8890"))
+    # ERP bridge — set ERP_BASE_URL to enable live resolution of ERP master data
+    # e.g. "http://127.0.0.1:8000"  (erp_qms_core FastAPI instance)
+    erp_base_url: str | None = (os.getenv("ERP_BASE_URL") or RUNTIME_CONFIG.get("erp_base_url") or None)  # type: ignore[assignment]
     allowed_origins: tuple[str, ...] = (
         "http://127.0.0.1:8888",
         "http://localhost:8888",

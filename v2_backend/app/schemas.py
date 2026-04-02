@@ -1,8 +1,9 @@
 ﻿from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DocumentIngestRequest(BaseModel):
@@ -51,3 +52,80 @@ class DocumentVersionCandidatesRequest(BaseModel):
     document_id: str | None = None
     path: str | None = None
     limit: int = Field(default=10, ge=1, le=20)
+
+
+# ── ERP bridge response schemas ───────────────────────────────────────────────
+
+
+class AuditLogResponse(BaseModel):
+    """AuditLog record enriched with resolved ERP User info."""
+    id: str
+    trace_id: str
+    task_type: str
+    user_id: str
+    prompt_version: str
+    result_status: str
+    request_summary: str
+    created_at: datetime
+    auditor_id: str | None = None
+    auditor_info: dict | None = Field(
+        default=None,
+        description="Resolved User entity from erp_qms_core (populated at read time)",
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentResponse(BaseModel):
+    """Document record enriched with resolved ERP Department info."""
+    id: str
+    source_path: str
+    title: str
+    document_code: str
+    file_type: str
+    version: str
+    owner_dept: str
+    source_system: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    owner_dept_id: str | None = None
+    department_info: dict | None = Field(
+        default=None,
+        description="Resolved Department entity from erp_qms_core (populated at read time)",
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AuditCacheResponse(BaseModel):
+    """AuditCache record enriched with resolved ERP Customer info."""
+    id: str
+    cache_key: str
+    document_id: str
+    llm_enabled: bool
+    created_at: datetime
+    customer_id: str | None = None
+    customer_info: dict | None = Field(
+        default=None,
+        description="Resolved Customer entity from erp_qms_core (populated at read time)",
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CompareCacheResponse(BaseModel):
+    """CompareCache record enriched with resolved ERP Supplier info."""
+    id: str
+    cache_key: str
+    left_document_id: str
+    right_document_id: str
+    use_llm: bool
+    created_at: datetime
+    supplier_id: str | None = None
+    supplier_info: dict | None = Field(
+        default=None,
+        description="Resolved Supplier entity from erp_qms_core (populated at read time)",
+    )
+
+    model_config = ConfigDict(from_attributes=True)

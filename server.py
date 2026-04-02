@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import logging
+import logging.handlers
 import os
 import secrets
 import tempfile
@@ -11,6 +13,7 @@ from functools import wraps
 from pathlib import Path
 from urllib.parse import urlencode
 
+import bcrypt
 import jwt as pyjwt
 import requests
 from flask import (
@@ -28,6 +31,7 @@ import ops_data
 from runtime_paths import (
     GOOGLE_CONFIG_PATH,
     GOOGLE_TOKEN_PATH,
+    LOG_DIR,
     get_or_create_flask_secret,
     migrate_legacy_private_files,
     public_root_contains_private_files,
@@ -55,6 +59,21 @@ app = Flask(__name__, static_folder=None)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024
 migrate_legacy_private_files()
 app.secret_key = os.environ.get('FLASK_SECRET_KEY') or get_or_create_flask_secret()
+
+# ─── 結構化 Logging ──────────────────────────────────────────────────────────
+_log_file = LOG_DIR / "server.log"
+_log_handler = logging.handlers.RotatingFileHandler(
+    _log_file, maxBytes=5_000_000, backupCount=5, encoding="utf-8"
+)
+_log_handler.setFormatter(logging.Formatter(
+    "%(asctime)s %(levelname)-8s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+))
+logger = logging.getLogger("audit")
+logger.setLevel(logging.INFO)
+logger.addHandler(_log_handler)
+# 同時保留 terminal 輸出（開發方便）
+logger.addHandler(logging.StreamHandler())
+logger.propagate = False
 
 
 def read_json(path: Path, fallback):
@@ -216,7 +235,7 @@ def json_body() -> dict:
     return request.get_json(force=True) or {}
 
 
-def save_ops_records(kind: str):
+def save_ops_records(kind: str, company_id: str = "JEPE"):
     body = json_body()
     records = body.get('records')
     replace_source_file = str(body.get('replace_source_file') or '').strip()
@@ -229,6 +248,7 @@ def save_ops_records(kind: str):
         kind,
         [record for record in records if isinstance(record, dict)],
         replace_source_file=replace_source_file,
+        company_id=company_id,
     )
     payload = {'items': items, 'saved': saved}
     if kind == 'environment':
@@ -420,154 +440,240 @@ def api_document_extract_markdown():
         })
 
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("文件抽取失敗: %s", exc)
         return json_error(f'文件抽取失敗：{exc}', 500)
 
 
+# ─── JWT 身份驗證 helpers（需在 ops endpoints 之前定義）────────────────────────
+
+USERS_PATH = BASE_DIR / "users.json"
+JWT_EXPIRY_HOURS = 12
+
+# 登入頻率限制：同一 IP 最多 5 次失敗，鎖定 15 分鐘
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_LOCKOUT_SECONDS = 900
+_login_attempts: dict[str, dict] = {}  # { ip: { "count": int, "blocked_until": float } }
+
+def _jwt_secret() -> str:
+    return get_or_create_flask_secret()
+
+def _load_users() -> list[dict]:
+    return read_json(USERS_PATH, [])
+
+def _hash_password(pw: str) -> str:
+    """產生 bcrypt 雜湊（含隨機鹽，每次結果不同）。"""
+    return bcrypt.hashpw(pw.encode(), bcrypt.gensalt(rounds=12)).decode()
+
+def _verify_password(pw: str, stored_hash: str) -> bool:
+    """
+    驗證密碼，同時支援：
+      - bcrypt  ($2b$ 開頭) → 直接以 bcrypt 驗證
+      - SHA-256 legacy (64 位 hex) → 以 SHA-256 驗證（過渡期相容）
+    """
+    if stored_hash.startswith("$2"):
+        return bcrypt.checkpw(pw.encode(), stored_hash.encode())
+    # Legacy SHA-256（無鹽）
+    import hashlib as _hl
+    return _hl.sha256(pw.encode()).hexdigest() == stored_hash
+
+def _make_token(user: dict) -> str:
+    payload = {
+        "sub": user["username"],
+        "role": user["role"],
+        "display": user["display"],
+        "company_id": user.get("company_id", "JEPE"),
+        "exp": time.time() + JWT_EXPIRY_HOURS * 3600,
+    }
+    return pyjwt.encode(payload, _jwt_secret(), algorithm="HS256")
+
+def _cid() -> str:
+    """Extract company_id from the JWT payload in g.user (populated by require_auth)."""
+    from flask import g
+    return g.user.get("company_id", "JEPE")
+
+def _decode_token(token: str) -> dict | None:
+    try:
+        return pyjwt.decode(token, _jwt_secret(), algorithms=["HS256"])
+    except pyjwt.ExpiredSignatureError:
+        return None
+    except pyjwt.InvalidTokenError:
+        return None
+
+def require_auth(f):
+    """裝飾器：驗證 JWT，失敗回傳 401。將解碼後的 payload 以 g.user 傳入。"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        from flask import g
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header.removeprefix("Bearer ").strip()
+        if not token:
+            return jsonify({"error": "未登入，請先登入系統"}), 401
+        payload = _decode_token(token)
+        if payload is None:
+            return jsonify({"error": "登入已過期，請重新登入"}), 401
+        g.user = payload
+        return f(*args, **kwargs)
+    return decorated
+
+
 @app.route('/api/nonconformances', methods=['GET'])
+@require_auth
 def api_nonconformances_list():
-    return jsonify({'items': ops_data.load_records('nonconformance')})
+    return jsonify({'items': ops_data.load_records('nonconformance', _cid())})
 
 
 @app.route('/api/nonconformances', methods=['POST'])
+@require_auth
 def api_nonconformances_save():
     try:
-        return save_ops_records('nonconformance')
+        return save_ops_records('nonconformance', _cid())
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
 
 
 @app.route('/api/nonconformances/<record_id>', methods=['DELETE'])
+@require_auth
 def api_nonconformances_delete(record_id):
     try:
-        items, deleted = ops_data.delete_record('nonconformance', record_id)
+        items, deleted = ops_data.delete_record('nonconformance', record_id, _cid())
         if not deleted:
             return json_error('Record not found.', 404)
         return jsonify({'items': items, 'deleted_id': record_id})
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
 
 
 @app.route('/api/nonconformances/import', methods=['POST'])
+@require_auth
 def api_nonconformances_import():
     try:
         upload = request.files.get('file')
         if upload is None or not upload.filename:
             return json_error('Upload file is required.')
-        return jsonify(ops_data.parse_import('nonconformance', upload))
+        return jsonify(ops_data.parse_import('nonconformance', upload, _cid()))
     except ValueError as exc:
         return json_error(str(exc), 400)
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
 
 
 @app.route('/api/audit-plans', methods=['GET'])
+@require_auth
 def api_audit_plans_list():
-    return jsonify({'items': ops_data.load_records('auditplan')})
+    return jsonify({'items': ops_data.load_records('auditplan', _cid())})
 
 
 @app.route('/api/audit-plans', methods=['POST'])
+@require_auth
 def api_audit_plans_save():
     try:
-        return save_ops_records('auditplan')
+        return save_ops_records('auditplan', _cid())
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
 
 
 @app.route('/api/audit-plans/<record_id>', methods=['DELETE'])
+@require_auth
 def api_audit_plans_delete(record_id):
     try:
-        items, deleted = ops_data.delete_record('auditplan', record_id)
+        items, deleted = ops_data.delete_record('auditplan', record_id, _cid())
         if not deleted:
             return json_error('Record not found.', 404)
         return jsonify({'items': items, 'deleted_id': record_id})
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
 
 
 @app.route('/api/audit-plans/import', methods=['POST'])
+@require_auth
 def api_audit_plans_import():
     try:
         upload = request.files.get('file')
         if upload is None or not upload.filename:
             return json_error('Upload file is required.')
-        return jsonify(ops_data.parse_import('auditplan', upload))
+        return jsonify(ops_data.parse_import('auditplan', upload, _cid()))
     except ValueError as exc:
         return json_error(str(exc), 400)
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
 
 
 @app.route('/api/audit-plans/<record_id>/attachments', methods=['GET'])
+@require_auth
 def api_audit_plan_attachments(record_id):
     try:
-        return jsonify({'attachments': ops_data.list_auditplan_attachments(record_id)})
+        return jsonify({'attachments': ops_data.list_auditplan_attachments(record_id, _cid())})
     except KeyError:
         return json_error('Record not found.', 404)
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
 
 
 @app.route('/api/environment-records', methods=['GET'])
+@require_auth
 def api_environment_records_list():
     start = request.args.get('start', '')
     end = request.args.get('end', '')
-    items = ops_data.filter_environment_records(start, end)
+    items = ops_data.filter_environment_records(start, end, _cid())
     return jsonify({'items': items, 'summary': ops_data.summarize_environment(items)})
 
 
 @app.route('/api/environment-records', methods=['POST'])
+@require_auth
 def api_environment_records_save():
     try:
-        return save_ops_records('environment')
+        return save_ops_records('environment', _cid())
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
 
 
 @app.route('/api/environment-records/<record_id>', methods=['DELETE'])
+@require_auth
 def api_environment_records_delete(record_id):
     try:
-        items, deleted = ops_data.delete_record('environment', record_id)
+        items, deleted = ops_data.delete_record('environment', record_id, _cid())
         if not deleted:
             return json_error('Record not found.', 404)
         return jsonify({'items': items, 'summary': ops_data.summarize_environment(items), 'deleted_id': record_id})
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
 
 
 @app.route('/api/environment-records/import', methods=['POST'])
+@require_auth
 def api_environment_records_import():
     try:
         upload = request.files.get('file')
         if upload is None or not upload.filename:
             return json_error('Upload file is required.')
-        return jsonify(ops_data.parse_import('environment', upload))
+        return jsonify(ops_data.parse_import('environment', upload, _cid()))
     except ValueError as exc:
         return json_error(str(exc), 400)
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
 
 
 @app.route('/api/environment-records/delete-range', methods=['POST'])
+@require_auth
 def api_environment_records_delete_range():
     try:
         body = json_body()
         start = body.get('start', '')
         end = body.get('end', '')
-        items, removed = ops_data.delete_environment_range(start, end)
+        items, removed = ops_data.delete_environment_range(start, end, _cid())
         return jsonify({'items': items, 'summary': ops_data.summarize_environment(items), 'removed_count': removed, 'deleted': removed})
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
 
 
@@ -579,7 +685,7 @@ def api_production_records_read_existing():
         records, source_file = record_imports.load_existing_production_records()
         return jsonify({'records': records, 'source_file': source_file})
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
 
 
@@ -603,7 +709,7 @@ def api_production_records_import():
             return json_error('這份檔案沒有讀到可辨識的生產日報資料，請確認是否為正式生產日報格式。', 400)
         return jsonify({'records': records, 'source_file': uploaded.filename})
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
     finally:
         if temp_path and temp_path.exists():
@@ -618,7 +724,7 @@ def api_quality_records_read_existing():
         records, source_file = record_imports.load_existing_quality_records()
         return jsonify({'records': records, 'source_file': source_file})
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
 
 
@@ -642,7 +748,7 @@ def api_quality_records_import():
             return json_error('這份檔案沒有讀到可辨識的品質檢驗資料，請確認是否為正式品質記錄格式。', 400)
         return jsonify({'records': records, 'source_file': uploaded.filename})
     except Exception as exc:
-        traceback.print_exc()
+        logger.exception("Unhandled error")
         return json_error(str(exc), 500)
     finally:
         if temp_path and temp_path.exists():
@@ -1225,65 +1331,50 @@ def api_spc_fosb():
 
 # ─── JWT 身份驗證 API ─────────────────────────────────────────────────────────
 
-USERS_PATH = BASE_DIR / "users.json"
-JWT_EXPIRY_HOURS = 12
-
-def _jwt_secret() -> str:
-    return get_or_create_flask_secret()
-
-def _load_users() -> list[dict]:
-    return read_json(USERS_PATH, [])
-
-def _hash_password(pw: str) -> str:
-    return hashlib.sha256(pw.encode()).hexdigest()
-
-def _make_token(user: dict) -> str:
-    payload = {
-        "sub": user["username"],
-        "role": user["role"],
-        "display": user["display"],
-        "exp": time.time() + JWT_EXPIRY_HOURS * 3600,
-    }
-    return pyjwt.encode(payload, _jwt_secret(), algorithm="HS256")
-
-def _decode_token(token: str) -> dict | None:
-    try:
-        return pyjwt.decode(token, _jwt_secret(), algorithms=["HS256"])
-    except pyjwt.ExpiredSignatureError:
-        return None
-    except pyjwt.InvalidTokenError:
-        return None
-
-def require_auth(f):
-    """裝飾器：驗證 JWT，失敗回傳 401。將解碼後的 payload 以 g.user 傳入。"""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        from flask import g
-        auth_header = request.headers.get("Authorization", "")
-        token = auth_header.removeprefix("Bearer ").strip()
-        if not token:
-            return jsonify({"error": "未登入，請先登入系統"}), 401
-        payload = _decode_token(token)
-        if payload is None:
-            return jsonify({"error": "登入已過期，請重新登入"}), 401
-        g.user = payload
-        return f(*args, **kwargs)
-    return decorated
-
 @app.route('/api/auth/login', methods=['POST'])
 def api_auth_login():
+    # ── 頻率限制 ──
+    ip = request.remote_addr or "unknown"
+    now = time.time()
+    record = _login_attempts.get(ip, {"count": 0, "blocked_until": 0.0})
+    if record["blocked_until"] > now:
+        remaining = int(record["blocked_until"] - now)
+        logger.warning("LOGIN_BLOCKED ip=%s remaining=%ds", ip, remaining)
+        return jsonify({"success": False, "error": f"登入嘗試過多，請 {remaining} 秒後再試"}), 429
+
     body = json_body()
     username = (body.get("username") or "").strip().lower()
     password = body.get("password") or ""
     users = _load_users()
     user = next((u for u in users if u["username"] == username), None)
-    if not user or user["password_hash"] != _hash_password(password):
+
+    if not user or not _verify_password(password, user["password_hash"]):
+        # 累計失敗次數
+        record["count"] += 1
+        if record["count"] >= _LOGIN_MAX_ATTEMPTS:
+            record["blocked_until"] = now + _LOGIN_LOCKOUT_SECONDS
+            record["count"] = 0
+            logger.warning("LOGIN_LOCKOUT ip=%s user=%s", ip, username)
+        else:
+            logger.warning("LOGIN_FAIL ip=%s user=%s attempt=%d", ip, username, record["count"])
+        _login_attempts[ip] = record
         return jsonify({"success": False, "error": "帳號或密碼錯誤"}), 401
+
+    # 登入成功 → 清除失敗記錄
+    _login_attempts.pop(ip, None)
+    logger.info("LOGIN_OK ip=%s user=%s role=%s", ip, username, user.get("role"))
+
+    # 懶遷移：若密碼仍為 SHA-256，趁此機會升級成 bcrypt
+    if not user["password_hash"].startswith("$2"):
+        user["password_hash"] = _hash_password(password)
+        write_json(USERS_PATH, users)
+        logger.info("PASSWORD_UPGRADED user=%s SHA256→bcrypt", username)
+
     token = _make_token(user)
     return jsonify({
         "success": True,
         "token": token,
-        "user": {"username": user["username"], "role": user["role"], "display": user["display"]},
+        "user": {"username": user["username"], "role": user["role"], "display": user["display"], "company_id": user.get("company_id", "JEPE")},
         "expires_in": JWT_EXPIRY_HOURS * 3600,
     })
 
@@ -1295,6 +1386,7 @@ def api_auth_me():
         "username": g.user["sub"],
         "role": g.user["role"],
         "display": g.user["display"],
+        "company_id": g.user.get("company_id", "JEPE"),
     }})
 
 @app.route('/api/auth/change-password', methods=['POST'])
@@ -1308,9 +1400,9 @@ def api_auth_change_password():
         return json_error("新密碼至少需要 6 個字元")
     users = _load_users()
     user = next((u for u in users if u["username"] == g.user["sub"]), None)
-    if not user or user["password_hash"] != _hash_password(old_pw):
+    if not user or not _verify_password(old_pw, user["password_hash"]):
         return json_error("舊密碼錯誤", 401)
-    user["password_hash"] = _hash_password(new_pw)
+    user["password_hash"] = _hash_password(new_pw)  # 一律存 bcrypt
     write_json(USERS_PATH, users)
     return jsonify({"success": True, "message": "密碼已更新"})
 

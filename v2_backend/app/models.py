@@ -28,6 +28,11 @@ class Document(Base):
     full_text: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    # ── ERP bridge ────────────────────────────────────────────────────────────
+    owner_dept_id: Mapped[str | None] = mapped_column(
+        Text, nullable=True, index=True,
+        comment="FK reference to erp_qms_core.departments.id (UUID Text)",
+    )
 
     chunks: Mapped[list["DocumentChunk"]] = relationship(back_populates="document", cascade="all, delete-orphan")
 
@@ -107,6 +112,11 @@ class AuditLog(Base):
     result_status: Mapped[str] = mapped_column(Text, default="success")
     request_summary: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # ── ERP bridge ────────────────────────────────────────────────────────────
+    auditor_id: Mapped[str | None] = mapped_column(
+        Text, nullable=True, index=True,
+        comment="FK reference to erp_qms_core.users.id (UUID Text)",
+    )
 
 
 class CompareCache(Base):
@@ -119,6 +129,11 @@ class CompareCache(Base):
     use_llm: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     response_json: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # ── ERP bridge ────────────────────────────────────────────────────────────
+    supplier_id: Mapped[str | None] = mapped_column(
+        Text, nullable=True, index=True,
+        comment="FK reference to erp_qms_core.suppliers.id (UUID Text)",
+    )
 
 
 class AuditCache(Base):
@@ -130,3 +145,8 @@ class AuditCache(Base):
     llm_enabled: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     response_json: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # ── ERP bridge ────────────────────────────────────────────────────────────
+    customer_id: Mapped[str | None] = mapped_column(
+        Text, nullable=True, index=True,
+        comment="FK reference to erp_qms_core.customers.id (UUID Text)",
+    )

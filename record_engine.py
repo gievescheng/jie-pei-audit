@@ -138,6 +138,33 @@ TEMPLATES = [
         "downstream": [],
         "includes": [],
     },
+    {
+        "code": "training_summary",
+        "title": "7.2 訓練記錄摘要",
+        "description": "依訓練記錄資料產生月度訓練摘要報表，含訓練項目清單與出席統計。",
+        "requires": ["training_records"],
+        "bundle": False,
+        "downstream": [],
+        "includes": [],
+    },
+    {
+        "code": "supplier_eval",
+        "title": "8.4 供應商評鑑報告",
+        "description": "依供應商評鑑資料產生 ISO 9001 第 8.4 條所需之供應商績效評鑑報表，含總分與等級評定。",
+        "requires": ["supplier_eval_records"],
+        "bundle": False,
+        "downstream": [],
+        "includes": [],
+    },
+    {
+        "code": "management_review_signin",
+        "title": "9.3 管理審查簽到表",
+        "description": "產生管理審查會議簽到表，含出席者姓名、職稱、部門與簽名欄。",
+        "requires": ["review_attendees"],
+        "bundle": False,
+        "downstream": [],
+        "includes": [],
+    },
 ]
 
 KEYWORDS = {
@@ -155,6 +182,9 @@ KEYWORDS = {
     "audit_notice": ["稽核通知", "內部稽核通知", "稽核通知書", "稽核計畫通知"],
     "audit_pack": ["稽核流程包", "稽核包", "稽核文件包", "內部稽核流程"],
     "management_review_pack": ["管理審查", "管理評審", "管審", "管理審查流程包", "management review", "管理審查記錄", "管理審查報告"],
+    "training_summary": ["訓練記錄", "訓練摘要", "教育訓練", "訓練統計", "7.2", "人員能力", "訓練月報"],
+    "supplier_eval": ["供應商評鑑", "供應商評估", "供應商績效", "8.4", "外包管理", "供應商考核"],
+    "management_review_signin": ["管理審查簽到", "審查簽到", "管理審查會議", "9.3", "簽到表", "出席簽到"],
 }
 
 
@@ -403,6 +433,9 @@ def precheck_template(payload: dict) -> dict:
             "shipment": 1 if payload.get("shipment_request") else 0,
             "nonconformance": 1 if payload.get("nonconformance") else 0,
             "audit_plans": len(payload.get("audit_plans") or []),
+            "training_records": len(payload.get("training_records") or []),
+            "supplier_eval_records": len(payload.get("supplier_eval_records") or []),
+            "review_attendees": len(payload.get("review_attendees") or []),
         },
         "included_templates": included_templates,
         "downstream_templates": downstream_templates,
@@ -1347,6 +1380,234 @@ def _build_management_review_pack(payload: dict):
     return _zip_files(entries, f"{year_month}_管理審查流程包.zip")
 
 
+def _build_training_summary(payload: dict):
+    """
+    7.2 訓練記錄摘要
+    Requires payload key: training_records (list of {date, topic, instructor, dept, attendees, hours, result, note})
+    3 sheets: 訓練摘要 (KPIs), 訓練明細 (all records), 未完成清單 (未通過)
+    """
+    records = payload.get("training_records") or []
+    year_month = datetime.today().strftime("%Y-%m")
+    report_period = payload.get("report_period") or year_month
+
+    # ── KPI 計算 ─────────────────────────────────────────────────
+    total_attendee_sessions = sum(len(r.get("attendees") or []) if isinstance(r.get("attendees"), list) else 1 for r in records)
+    topic_count = len({_normalize_text(r.get("topic")) for r in records if r.get("topic")})
+    passed = [r for r in records if _normalize_text(r.get("result")) == "通過"]
+    pass_rate = round(len(passed) / len(records) * 100) if records else 0
+    incomplete = [r for r in records if _normalize_text(r.get("result")) not in ("通過", "")]
+
+    wb = Workbook()
+
+    # ── Sheet 1：訓練摘要 ─────────────────────────────────────────
+    ws1 = wb.active
+    ws1.title = "訓練摘要"
+    ws1.append(["潔沛企業有限公司"])
+    ws1.append(["7.2 訓練記錄摘要"])
+    ws1.append([f"統計期間：{report_period}"])
+    ws1.append([])
+    ws1.append(["指標", "數值"])
+    ws1.append(["總訓練人次", total_attendee_sessions])
+    ws1.append(["訓練項目數", topic_count])
+    ws1.append(["通過率 (%)", pass_rate])
+    ws1.append(["未通過人次", len(incomplete)])
+    # Title styling
+    ws1["A1"].font = Font(bold=True, size=14, name="Calibri")
+    ws1["A2"].font = Font(bold=True, size=12, name="Calibri")
+    ws1["A3"].font = Font(size=10, name="Calibri", color="666666")
+    _style_header_row(ws1, row=5)
+    _style_data_rows(ws1, start_row=6)
+    _autofit_columns(ws1)
+
+    # ── Sheet 2：訓練明細 ─────────────────────────────────────────
+    ws2 = wb.create_sheet("訓練明細")
+    headers = ["訓練日期", "訓練項目", "講師", "部門", "參訓人員", "時數", "結果", "備註"]
+    ws2.append(headers)
+    for r in records:
+        attendees = r.get("attendees")
+        if isinstance(attendees, list):
+            attendees_str = "、".join(str(a) for a in attendees)
+        else:
+            attendees_str = _normalize_text(attendees)
+        row_data = [
+            _normalize_text(r.get("date")),
+            _normalize_text(r.get("topic")),
+            _normalize_text(r.get("instructor")),
+            _normalize_text(r.get("dept")),
+            attendees_str,
+            r.get("hours", ""),
+            _normalize_text(r.get("result")),
+            _normalize_text(r.get("note")),
+        ]
+        ws2.append(row_data)
+    _style_header_row(ws2, row=1)
+    _style_data_rows(ws2, start_row=2)
+    # 標紅未通過列
+    for i, r in enumerate(records, start=2):
+        if _normalize_text(r.get("result")) == "未通過":
+            for cell in ws2[i]:
+                cell.fill = _hdr_fill("FFDEDE")
+                cell.font = Font(color="CC0000", name="Calibri", size=10)
+    _autofit_columns(ws2)
+
+    # ── Sheet 3：未完成清單 ───────────────────────────────────────
+    ws3 = wb.create_sheet("未完成清單")
+    ws3.append(["人員姓名", "部門", "未完成項目", "應完成日期"])
+    for r in incomplete:
+        attendees = r.get("attendees")
+        if isinstance(attendees, list):
+            for person in attendees:
+                ws3.append([
+                    _normalize_text(person),
+                    _normalize_text(r.get("dept")),
+                    _normalize_text(r.get("topic")),
+                    _normalize_text(r.get("due_date")),
+                ])
+        else:
+            ws3.append([
+                _normalize_text(attendees),
+                _normalize_text(r.get("dept")),
+                _normalize_text(r.get("topic")),
+                _normalize_text(r.get("due_date")),
+            ])
+    _style_header_row(ws3, row=1)
+    _style_data_rows(ws3, start_row=2)
+    _autofit_columns(ws3)
+
+    out_path = _tmp_xlsx()
+    wb.save(out_path)
+    filename = f"7.2_訓練記錄摘要_{report_period}.xlsx"
+    return out_path, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _build_supplier_eval(payload: dict):
+    """
+    8.4 供應商評鑑報告
+    Requires payload key: supplier_eval_records (list of {supplier, category, score_items, total_score, grade, evaluator, date, note})
+    2 sheets: 評鑑摘要 (summary with grades), 評分明細 (item-level scores)
+    """
+    records = payload.get("supplier_eval_records") or []
+    year_month = datetime.today().strftime("%Y-%m")
+    report_period = payload.get("report_period") or year_month
+
+    wb = Workbook()
+
+    # ── Sheet 1：評鑑摘要 ─────────────────────────────────────────
+    ws1 = wb.active
+    ws1.title = "評鑑摘要"
+    ws1.append(["潔沛企業有限公司"])
+    ws1.append(["8.4 供應商評鑑報告"])
+    ws1.append([f"評鑑期間：{report_period}"])
+    ws1.append([])
+    headers = ["供應商名稱", "類別", "總分", "等級", "評鑑人員", "評鑑日期", "備註"]
+    ws1.append(headers)
+    ws1["A1"].font = Font(bold=True, size=14, name="Calibri")
+    ws1["A2"].font = Font(bold=True, size=12, name="Calibri")
+    ws1["A3"].font = Font(size=10, name="Calibri", color="666666")
+    _style_header_row(ws1, row=5)
+    for r in records:
+        grade = _normalize_text(r.get("grade"))
+        total_score = r.get("total_score", "")
+        ws1.append([
+            _normalize_text(r.get("supplier")),
+            _normalize_text(r.get("category")),
+            total_score,
+            grade,
+            _normalize_text(r.get("evaluator")),
+            _normalize_text(r.get("date")),
+            _normalize_text(r.get("note")),
+        ])
+    _style_data_rows(ws1, start_row=6)
+    # 依等級標色
+    grade_colors = {"A": "DFFFDF", "B": "FFFFF0", "C": "FFF5CC", "D": "FFDEDE"}
+    grade_font   = {"A": "006600", "B": "886600", "C": "886600", "D": "CC0000"}
+    for i, r in enumerate(records, start=6):
+        grade = _normalize_text(r.get("grade")).upper()
+        if grade in grade_colors:
+            for cell in ws1[i]:
+                cell.fill = _hdr_fill(grade_colors[grade])
+                cell.font = Font(color=grade_font[grade], name="Calibri", size=10)
+    _autofit_columns(ws1)
+
+    # ── Sheet 2：評分明細 ─────────────────────────────────────────
+    ws2 = wb.create_sheet("評分明細")
+    ws2.append(["供應商名稱", "評分項目", "配分", "得分", "說明"])
+    _style_header_row(ws2, row=1)
+    for r in records:
+        supplier = _normalize_text(r.get("supplier"))
+        for item in (r.get("score_items") or []):
+            ws2.append([
+                supplier,
+                _normalize_text(item.get("name")),
+                item.get("max_score", ""),
+                item.get("score", ""),
+                _normalize_text(item.get("remark")),
+            ])
+    _style_data_rows(ws2, start_row=2)
+    _autofit_columns(ws2)
+
+    out_path = _tmp_xlsx()
+    wb.save(out_path)
+    filename = f"8.4_供應商評鑑報告_{report_period}.xlsx"
+    return out_path, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _build_management_review_signin(payload: dict):
+    """
+    9.3 管理審查簽到表
+    Requires payload key: review_attendees (list of {name, title, dept})
+    Single sheet with meeting info header and signature rows.
+    """
+    attendees = payload.get("review_attendees") or []
+    meeting_date = _normalize_text(payload.get("meeting_date") or datetime.today().strftime("%Y-%m-%d"))
+    meeting_title = _normalize_text(payload.get("meeting_title") or "管理審查會議")
+    chairperson = _normalize_text(payload.get("chairperson") or "")
+    location = _normalize_text(payload.get("location") or "")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "管理審查簽到表"
+
+    # ── 會議資訊標頭 ──────────────────────────────────────────────
+    ws.append(["潔沛企業有限公司"])
+    ws.append(["9.3 管理審查簽到表"])
+    ws.append([f"會議名稱：{meeting_title}", "", f"會議日期：{meeting_date}"])
+    ws.append([f"主持人：{chairperson}", "", f"地點：{location}"])
+    ws.append([])
+    ws["A1"].font = Font(bold=True, size=14, name="Calibri")
+    ws["A2"].font = Font(bold=True, size=12, name="Calibri")
+
+    # ── 簽到欄位 ──────────────────────────────────────────────────
+    ws.append(["序號", "姓名", "職稱", "部門", "簽名"])
+    _style_header_row(ws, row=6, fill_hex="1E3A5F")
+    for i, person in enumerate(attendees, start=1):
+        ws.append([
+            i,
+            _normalize_text(person.get("name")),
+            _normalize_text(person.get("title")),
+            _normalize_text(person.get("dept")),
+            "",  # 簽名欄留空
+        ])
+    # 若無資料，留 5 個空白簽到列
+    if not attendees:
+        for i in range(1, 6):
+            ws.append([i, "", "", "", ""])
+
+    _style_data_rows(ws, start_row=7)
+    # 加高列高讓簽名有空間
+    for row_idx in range(7, 7 + max(len(attendees), 5) + 1):
+        ws.row_dimensions[row_idx].height = 30
+    # 簽名欄（E 欄）加寬
+    ws.column_dimensions["E"].width = 25
+    _autofit_columns(ws)
+    ws.column_dimensions["E"].width = 25  # 確保覆蓋
+
+    out_path = _tmp_xlsx()
+    wb.save(out_path)
+    filename = f"9.3_管理審查簽到表_{meeting_date}.xlsx"
+    return out_path, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
 def generate_template(payload: dict):
     template_code = _normalize_text(payload.get("template_code"))
     if not template_code:
@@ -1382,6 +1643,12 @@ def generate_template(payload: dict):
         return _build_audit_pack(payload)
     if template_code == "management_review_pack":
         return _build_management_review_pack(payload)
+    if template_code == "training_summary":
+        return _build_training_summary(payload)
+    if template_code == "supplier_eval":
+        return _build_supplier_eval(payload)
+    if template_code == "management_review_signin":
+        return _build_management_review_signin(payload)
     raise ValueError(f"Unsupported template_code: {template_code}")
 
 

@@ -104,6 +104,157 @@ def _parse_text(path: Path) -> dict:
     return {"title": path.stem, "file_type": path.suffix.lower().lstrip("."), "full_text": text, "chunks": _chunk_lines(text.splitlines())}
 
 
+# ── ERP-QMS bridge resolvers ─────────────────────────────────────────────────
+#
+# Strategy A (separate DBs / default):  HTTP GET to erp_qms_core API endpoint
+# Strategy B (same PostgreSQL / dev):   Direct query via shared SQLAlchemy session
+#
+# All resolvers follow the same contract:
+#   - return None  when the FK is None / empty
+#   - return dict  {"id": ..., "resolved": True, ...} on success
+#   - return dict  {"id": ..., "resolved": False, "error": "..."} on failure (never raise)
+
+
+def resolve_user(
+    auditor_id: str | None,
+    *,
+    session=None,
+    erp_base_url: str | None = None,
+) -> dict | None:
+    """Resolve a User from erp_qms_core by UUID.
+
+    Used to enrich AuditLog.auditor_id with full_name / role information.
+    """
+    if not auditor_id:
+        return None
+    if erp_base_url:
+        try:
+            r = httpx.get(f"{erp_base_url}/api/users/{auditor_id}", timeout=5)
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            return {"id": auditor_id, "resolved": False, "error": str(exc)}
+    if session:
+        try:
+            from erp_qms_core.backend.app.models import User  # type: ignore[import]
+            entity = session.get(User, auditor_id)
+            if entity:
+                return {
+                    "id": entity.id,
+                    "resolved": True,
+                    "full_name": getattr(entity, "full_name", ""),
+                    "email": getattr(entity, "email", ""),
+                }
+        except Exception as exc:
+            return {"id": auditor_id, "resolved": False, "error": str(exc)}
+    return {"id": auditor_id, "resolved": False, "note": "configure ERP_BASE_URL or shared session"}
+
+
+def resolve_department(
+    owner_dept_id: str | None,
+    *,
+    session=None,
+    erp_base_url: str | None = None,
+) -> dict | None:
+    """Resolve a Department from erp_qms_core by UUID.
+
+    Used to enrich Document.owner_dept_id with department name / code.
+    """
+    if not owner_dept_id:
+        return None
+    if erp_base_url:
+        try:
+            r = httpx.get(f"{erp_base_url}/api/departments/{owner_dept_id}", timeout=5)
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            return {"id": owner_dept_id, "resolved": False, "error": str(exc)}
+    if session:
+        try:
+            from erp_qms_core.backend.app.models import Department  # type: ignore[import]
+            entity = session.get(Department, owner_dept_id)
+            if entity:
+                return {
+                    "id": entity.id,
+                    "resolved": True,
+                    "name": getattr(entity, "name", ""),
+                    "code": getattr(entity, "code", ""),
+                }
+        except Exception as exc:
+            return {"id": owner_dept_id, "resolved": False, "error": str(exc)}
+    return {"id": owner_dept_id, "resolved": False, "note": "configure ERP_BASE_URL or shared session"}
+
+
+def resolve_customer(
+    customer_id: str | None,
+    *,
+    session=None,
+    erp_base_url: str | None = None,
+) -> dict | None:
+    """Resolve a Customer from erp_qms_core by UUID.
+
+    Used to enrich AuditCache.customer_id with name / contact information.
+    """
+    if not customer_id:
+        return None
+    if erp_base_url:
+        try:
+            r = httpx.get(f"{erp_base_url}/api/customers/{customer_id}", timeout=5)
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            return {"id": customer_id, "resolved": False, "error": str(exc)}
+    if session:
+        try:
+            from erp_qms_core.backend.app.models import Customer  # type: ignore[import]
+            entity = session.get(Customer, customer_id)
+            if entity:
+                return {
+                    "id": entity.id,
+                    "resolved": True,
+                    "name": getattr(entity, "name", ""),
+                    "contact_person": getattr(entity, "contact_person", ""),
+                }
+        except Exception as exc:
+            return {"id": customer_id, "resolved": False, "error": str(exc)}
+    return {"id": customer_id, "resolved": False, "note": "configure ERP_BASE_URL or shared session"}
+
+
+def resolve_supplier(
+    supplier_id: str | None,
+    *,
+    session=None,
+    erp_base_url: str | None = None,
+) -> dict | None:
+    """Resolve a Supplier from erp_qms_core by UUID.
+
+    Used to enrich CompareCache.supplier_id with name / category information.
+    """
+    if not supplier_id:
+        return None
+    if erp_base_url:
+        try:
+            r = httpx.get(f"{erp_base_url}/api/suppliers/{supplier_id}", timeout=5)
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            return {"id": supplier_id, "resolved": False, "error": str(exc)}
+    if session:
+        try:
+            from erp_qms_core.backend.app.models import Supplier  # type: ignore[import]
+            entity = session.get(Supplier, supplier_id)
+            if entity:
+                return {
+                    "id": entity.id,
+                    "resolved": True,
+                    "name": getattr(entity, "name", ""),
+                    "category": getattr(entity, "category", ""),
+                }
+        except Exception as exc:
+            return {"id": supplier_id, "resolved": False, "error": str(exc)}
+    return {"id": supplier_id, "resolved": False, "note": "configure ERP_BASE_URL or shared session"}
+
+
 def maybe_call_openrouter(*, system_prompt: str, policy_prompt: str, user_prompt: str) -> str | None:
     if not settings.openrouter_api_key:
         return None

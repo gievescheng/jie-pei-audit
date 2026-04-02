@@ -1,0 +1,23 @@
+# audit-dashboard 前端元件載入順序
+# build_html.py 會依序合併這些檔案成 index.html
+# 請勿任意調整順序（後面的元件依賴前面的定義）
+
+01_data.jsx
+02_helpers.jsx
+03_shared_components.jsx
+04_calibration_tab.jsx
+05_documents_tab.jsx
+06_training_tab.jsx
+07_equipment_tab.jsx
+08_supplier_tab.jsx
+09_nonconformance_tab.jsx
+10_audit_plan_tab.jsx
+11_environment_tab.jsx
+12_production_tab.jsx
+13_notification_tab.jsx
+14_ai_workbench_tab.jsx
+15_report_library.jsx
+16_spc_tab.jsx
+17_kpi_panels.jsx
+18_kpi_dashboard.jsx
+19_app.jsx
