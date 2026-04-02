@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from sqlalchemy.exc import IntegrityError
 
+from fastapi import HTTPException
+
 from ..core.db import session_scope
 from ..core.errors import integrity_http_error, not_found_error
+from ..domain.transitions import can_transition
 from ..core.responses import ok
 from ..repositories import shipments as repo
 from ..schemas.common import StatusUpdate
@@ -51,5 +54,10 @@ def update_shipment_status(shipment_id: str, payload: StatusUpdate) -> dict:
         row = repo.get_by_id(session, shipment_id)
         if not row:
             raise not_found_error("shipment")
+        if not can_transition("shipment", row.ship_status, payload.status):
+            raise HTTPException(
+                status_code=422,
+                detail=f"無法從 '{row.ship_status}' 轉換為 '{payload.status}'。請確認出貨目前狀態允許此操作。",
+            )
         row.ship_status = payload.status
         return ok({"id": row.id, "shipment_no": row.shipment_no, "ship_status": row.ship_status}, message="updated")

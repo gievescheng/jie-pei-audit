@@ -241,6 +241,36 @@ class V2SmokeTest(unittest.TestCase):
         normalized = normalize_postgres_url('postgresql://user:pass@localhost:5432/auto_audit')
         self.assertTrue(normalized.startswith('postgresql+psycopg://'))
 
+    # ── Task 2：spc_engine_v2 整合驗證 ───────────────────────
+
+    def test_spc_analyze_uses_spc_engine_v2(self):
+        """確認 /api/v2/spc/analyze 回傳 spc_engine_v2 標記，且包含 I-MR 管制界限。"""
+        payload = {
+            "parameter_name": "Thickness",
+            "values": [702.1, 701.3, 703.0, 700.8, 702.5,
+                       701.9, 703.2, 699.5, 702.8, 701.1,
+                       702.4, 701.7, 703.1, 700.6, 702.9],
+            "lsl": 695.0,
+            "usl": 705.0,
+        }
+        resp = self.client.post("/api/v2/spc/analyze", json=payload)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()["data"]
+        self.assertIn("spc_engine_v2", data["tool_outputs_used"])
+        self.assertIn("x_ucl", data["metrics"])
+        self.assertIn("x_lcl", data["metrics"])
+        self.assertIn("cpk", data["metrics"])
+        self.assertIsNotNone(data["metrics"]["cpk"])
+
+    def test_spc_analyze_detects_ooc(self):
+        """確認明顯失控點能被偵測到。"""
+        values = [700.0] * 14 + [710.0]
+        payload = {"parameter_name": "Test", "values": values, "usl": 705.0, "lsl": 695.0}
+        resp = self.client.post("/api/v2/spc/analyze", json=payload)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()["data"]
+        self.assertGreater(len(data["metrics"]["out_of_control_x"]), 0)
+
 
 if __name__ == '__main__':
     unittest.main()

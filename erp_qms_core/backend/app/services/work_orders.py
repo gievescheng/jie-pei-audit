@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from sqlalchemy.exc import IntegrityError
 
+from fastapi import HTTPException
+
 from ..core.db import session_scope
 from ..core.errors import integrity_http_error, not_found_error
+from ..domain.transitions import can_transition
 from ..core.responses import ok
 from ..repositories import orders as repo
 from ..schemas.common import StatusUpdate, WorkOrderQtyUpdate
@@ -55,6 +58,11 @@ def update_work_order_status(wo_id: str, payload: StatusUpdate) -> dict:
         row = repo.get_work_order(session, wo_id)
         if not row:
             raise not_found_error("work order")
+        if not can_transition("work_order", row.wo_status, payload.status):
+            raise HTTPException(
+                status_code=422,
+                detail=f"無法從 '{row.wo_status}' 轉換為 '{payload.status}'。請確認工單目前狀態允許此操作。",
+            )
         row.wo_status = payload.status
         return ok({"id": row.id, "wo_no": row.wo_no, "wo_status": row.wo_status}, message="updated")
 

@@ -231,6 +231,63 @@ class ERPQMSCoreSmokeTest(unittest.TestCase):
         listed = self.ship.list_shipments()["data"]
         self.assertEqual(len(listed), 1)
 
+    # ── Task 3：狀態機守門員驗證 ─────────────────────────────────
+
+    def test_work_order_illegal_transition_is_rejected(self):
+        """completed → in_progress 是非法轉換，必須回傳 422。"""
+        customer = self.customers.create_customer(self.s.CustomerCreate(customer_code="C001", customer_name="測試客戶"))["data"]
+        so = self.so.create_sales_order(self.s.SalesOrderCreate(so_no="SO-001", customer_id=customer["id"]))["data"]
+        wo = self.wo.create_work_order(self.s.WorkOrderCreate(
+            wo_no="WO-001", so_id=so["id"], planned_qty=10
+        ))["data"]
+        # draft → in_progress（合法）
+        self.wo.update_work_order_status(wo["id"], self.s.StatusUpdate(status="in_progress"))
+        # in_progress → completed（合法）
+        self.wo.update_work_order_status(wo["id"], self.s.StatusUpdate(status="completed"))
+        # completed → in_progress（非法，應拋 422）
+        with self.assertRaises(HTTPException) as ctx:
+            self.wo.update_work_order_status(wo["id"], self.s.StatusUpdate(status="in_progress"))
+        self.assertEqual(ctx.exception.status_code, 422)
+
+    def test_work_order_legal_transition_succeeds(self):
+        """draft → in_progress 是合法轉換，必須正常回傳。"""
+        customer = self.customers.create_customer(self.s.CustomerCreate(customer_code="C002", customer_name="另一客戶"))["data"]
+        so = self.so.create_sales_order(self.s.SalesOrderCreate(so_no="SO-002", customer_id=customer["id"]))["data"]
+        wo = self.wo.create_work_order(self.s.WorkOrderCreate(
+            wo_no="WO-002", so_id=so["id"], planned_qty=5
+        ))["data"]
+        updated = self.wo.update_work_order_status(wo["id"], self.s.StatusUpdate(status="in_progress"))
+        self.assertTrue(updated["success"])
+        self.assertEqual(updated["data"]["wo_status"], "in_progress")
+
+    def test_sales_order_illegal_transition_is_rejected(self):
+        """completed → draft 是非法轉換，必須回傳 422。"""
+        customer = self.customers.create_customer(self.s.CustomerCreate(customer_code="C003", customer_name="第三客戶"))["data"]
+        so = self.so.create_sales_order(self.s.SalesOrderCreate(so_no="SO-003", customer_id=customer["id"]))["data"]
+        # draft → confirmed → released → completed
+        self.so.update_sales_order_status(so["id"], self.s.StatusUpdate(status="confirmed"))
+        self.so.update_sales_order_status(so["id"], self.s.StatusUpdate(status="released"))
+        self.so.update_sales_order_status(so["id"], self.s.StatusUpdate(status="completed"))
+        # completed → draft（非法）
+        with self.assertRaises(HTTPException) as ctx:
+            self.so.update_sales_order_status(so["id"], self.s.StatusUpdate(status="draft"))
+        self.assertEqual(ctx.exception.status_code, 422)
+
+    def test_shipment_illegal_transition_is_rejected(self):
+        """confirmed → draft 是非法轉換，必須回傳 422。"""
+        customer = self.customers.create_customer(self.s.CustomerCreate(customer_code="C004", customer_name="第四客戶"))["data"]
+        so = self.so.create_sales_order(self.s.SalesOrderCreate(so_no="SO-004", customer_id=customer["id"]))["data"]
+        shipment = self.ship.create_shipment(self.s.ShipmentCreate(
+            shipment_no="SH-002", so_id=so["id"], shipment_date=date.today()
+        ))["data"]
+        # draft → shipped → confirmed
+        self.ship.update_shipment_status(shipment["id"], self.s.StatusUpdate(status="shipped"))
+        self.ship.update_shipment_status(shipment["id"], self.s.StatusUpdate(status="confirmed"))
+        # confirmed → draft（非法）
+        with self.assertRaises(HTTPException) as ctx:
+            self.ship.update_shipment_status(shipment["id"], self.s.StatusUpdate(status="draft"))
+        self.assertEqual(ctx.exception.status_code, 422)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -351,10 +351,60 @@ def audit_document(session, request) -> dict:
 
 
 def analyze_spc(session, request) -> dict:
+    """SPC 分析 — 使用 spc_engine.py 的完整實作（I-MR + Nelson Rules + Cpk CI）。"""
+    from .spc_engine import run_imr
+
     prompt = resolve_prompt(session, "spc_analyze")
     values = engines.parse_numeric_values(request.values, request.csv_text)
-    metrics, abnormal_items = engines.compute_spc_metrics(values, lsl=request.lsl, usl=request.usl, target=request.target)
-    engineering_summary, management_summary = engines.build_spc_summaries(request.parameter_name, metrics, abnormal_items)
+
+    imr_result = run_imr(
+        values=values,
+        usl=request.usl,
+        lsl=request.lsl,
+        target=request.target,
+        chart_id=request.parameter_name,
+    )
+
+    cap = imr_result.get("capability", {})
+    metrics = {
+        "count":             imr_result["n"],
+        "mean":              imr_result["x_bar"],
+        "stdev":             imr_result["sigma_mr"],
+        "x_ucl":             imr_result["x_ucl"],
+        "x_lcl":             imr_result["x_lcl"],
+        "mr_ucl":            imr_result["mr_ucl"],
+        "lsl":               request.lsl,
+        "usl":               request.usl,
+        "target":            request.target,
+        "cp":                cap.get("cp"),
+        "cpk":               cap.get("cpk"),
+        "cpm":               cap.get("cpm"),
+        "cpk_ci":            cap.get("cpk_ci"),
+        "cpk_grade":         cap.get("grade"),
+        "out_of_control_x":  imr_result["ooc_x"],
+        "out_of_control_mr": imr_result["ooc_mr"],
+        "nelson_signals":    imr_result["nelson_signals"],
+        "warnings":          imr_result["warnings"],
+        # build_spc_summaries 所需的相容鍵
+        "trend": (
+            "up" if len(values) >= 2 and values[-1] > values[0] else
+            "down" if len(values) >= 2 and values[-1] < values[0] else "flat"
+        ),
+        "out_of_spec_count": sum(
+            1 for v in values
+            if (request.lsl is not None and v < request.lsl)
+            or (request.usl is not None and v > request.usl)
+        ),
+    }
+    abnormal_items = [
+        {"index": i + 1, "value": v, "type": "ooc_x"}
+        for i, v in enumerate(imr_result["x_values"])
+        if i in imr_result["ooc_x"]
+    ]
+
+    engineering_summary, management_summary = engines.build_spc_summaries(
+        request.parameter_name, metrics, abnormal_items
+    )
 
     llm_summary = adapters.maybe_call_openrouter(
         system_prompt=prompt["system_prompt"],
@@ -363,24 +413,24 @@ def analyze_spc(session, request) -> dict:
             prompt["user_prompt_template"]
             + "\n\nMetrics:\n"
             + json.dumps(metrics, ensure_ascii=False, indent=2)
-            + "\n\nAbnormal items:\n"
-            + json.dumps(abnormal_items, ensure_ascii=False, indent=2)
+            + "\n\nNelson Signals:\n"
+            + json.dumps(imr_result["nelson_signals"], ensure_ascii=False, indent=2)
         ),
     )
     if llm_summary:
         management_summary = llm_summary
 
     return {
-        "parameter_name": request.parameter_name,
-        "metrics": metrics,
-        "abnormal_items": abnormal_items,
+        "parameter_name":      request.parameter_name,
+        "metrics":             metrics,
+        "abnormal_items":      abnormal_items,
         "engineering_summary": engineering_summary,
-        "management_summary": management_summary,
-        "prompt_version": prompt["version"],
-        "citations": [],
+        "management_summary":  management_summary,
+        "prompt_version":      prompt["version"],
+        "citations":           [],
         "source_document_ids": [],
-        "tool_outputs_used": ["spc_engine"],
-        "needs_human_review": True,
+        "tool_outputs_used":   ["spc_engine_v2"],
+        "needs_human_review":  True,
     }
 
 
