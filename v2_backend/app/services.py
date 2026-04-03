@@ -683,4 +683,35 @@ def compare_documents(session, request) -> dict:
         use_llm=bool(getattr(request, "use_llm", False)),
         response_data=response_data,
     )
+    repositories.save_compare_result(
+        session,
+        left_document_id=left_doc.id,
+        right_document_id=right_doc.id,
+        left_title=left_doc.title,
+        right_title=right_doc.title,
+        similarity=similarity,
+        added_count=len(added_lines),
+        removed_count=len(removed_lines),
+        conclusion_json=json.dumps(version_info, ensure_ascii=False),
+    )
     return response_data
+
+
+def list_compare_history(session, *, limit: int = 20, offset: int = 0) -> list[dict]:
+    rows = repositories.list_compare_results(session, limit=limit, offset=offset)
+    return [
+        {
+            "id": row.id,
+            "left_document_id": row.left_document_id,
+            "right_document_id": row.right_document_id,
+            "left_title": row.left_title,
+            "right_title": row.right_title,
+            "similarity": row.similarity,
+            "added_count": row.added_count,
+            "removed_count": row.removed_count,
+            "conclusion": json.loads(row.conclusion_json) if row.conclusion_json else {},
+            "created_at": row.created_at.isoformat(),
+            "created_by": row.created_by,
+        }
+        for row in rows
+    ]

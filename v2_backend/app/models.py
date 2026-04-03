@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -150,3 +150,19 @@ class AuditCache(Base):
         Text, nullable=True, index=True,
         comment="FK reference to erp_qms_core.customers.id (UUID Text)",
     )
+
+
+class CompareResult(Base):
+    __tablename__ = "compare_results"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True, default=lambda: str(uuid.uuid4()))
+    left_document_id: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    right_document_id: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    left_title: Mapped[str] = mapped_column(Text, default="")
+    right_title: Mapped[str] = mapped_column(Text, default="")
+    similarity: Mapped[float] = mapped_column(Float, default=0.0)
+    added_count: Mapped[int] = mapped_column(Integer, default=0)
+    removed_count: Mapped[int] = mapped_column(Integer, default=0)
+    conclusion_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by: Mapped[str] = mapped_column(Text, default="system")

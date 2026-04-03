@@ -316,6 +316,45 @@ def clear_cache(session: Session, target: str = "all") -> dict:
     }
 
 
+def save_compare_result(
+    session: Session,
+    *,
+    left_document_id: str | None,
+    right_document_id: str | None,
+    left_title: str,
+    right_title: str,
+    similarity: float,
+    added_count: int,
+    removed_count: int,
+    conclusion_json: str,
+    created_by: str = "system",
+):
+    item = models.CompareResult(
+        left_document_id=left_document_id,
+        right_document_id=right_document_id,
+        left_title=left_title,
+        right_title=right_title,
+        similarity=similarity,
+        added_count=added_count,
+        removed_count=removed_count,
+        conclusion_json=conclusion_json,
+        created_by=created_by,
+    )
+    session.add(item)
+    session.flush()
+    return item
+
+
+def list_compare_results(session: Session, *, limit: int = 20, offset: int = 0):
+    stmt = (
+        select(models.CompareResult)
+        .order_by(models.CompareResult.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    return session.execute(stmt).scalars().all()
+
+
 def list_audit_logs(session: Session, *, task_types: list[str] | None = None, query: str = "", limit: int = 20):
     stmt = select(models.AuditLog).order_by(models.AuditLog.created_at.desc())
     if task_types:

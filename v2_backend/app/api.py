@@ -12,7 +12,7 @@ from .config import settings
 from .db import get_database_status, session_scope
 from .exports import build_document_audit_docx, build_document_compare_docx, build_document_compare_workbook
 from .schemas import DeviationDraftRequest, DocumentAuditRequest, DocumentCompareRequest, DocumentIngestRequest, DocumentVersionCandidatesRequest, KnowledgeQARequest, SPCAnalyzeRequest
-from .services import analyze_spc, answer_knowledge_question, audit_document, clear_runtime_cache, compare_documents, draft_deviation, ensure_seed_prompts, get_runtime_cache_status, ingest_documents, list_result_history, resolve_prompt, search_documents, suggest_version_candidates
+from .services import analyze_spc, answer_knowledge_question, audit_document, clear_runtime_cache, compare_documents, draft_deviation, ensure_seed_prompts, get_runtime_cache_status, ingest_documents, list_compare_history, list_result_history, resolve_prompt, search_documents, suggest_version_candidates
 
 router = APIRouter(prefix="/api/v2", tags=["v2"], dependencies=[Depends(require_api_key)])
 
@@ -213,6 +213,17 @@ def documents_compare(payload: DocumentCompareRequest):
         return _ok(data, message="document compare complete", trace_id=trace_id)
     except Exception as exc:
         return _error(str(exc), error_code="compare_failed", trace_id=trace_id)
+
+
+@router.get("/documents/compare/history")
+def documents_compare_history(limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0)):
+    trace_id = str(uuid.uuid4())
+    try:
+        with session_scope() as session:
+            data = list_compare_history(session, limit=limit, offset=offset)
+        return _ok(data, message="compare history ready", trace_id=trace_id)
+    except Exception as exc:
+        return _error(str(exc), error_code="compare_history_failed", trace_id=trace_id)
 
 
 @router.post("/documents/version-candidates")
