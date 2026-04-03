@@ -3,17 +3,18 @@
 import json
 import uuid
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
 from .audit import write_audit_log
+from .auth import require_api_key
 from .config import settings
 from .db import get_database_status, session_scope
 from .exports import build_document_audit_docx, build_document_compare_docx, build_document_compare_workbook
 from .schemas import DeviationDraftRequest, DocumentAuditRequest, DocumentCompareRequest, DocumentIngestRequest, DocumentVersionCandidatesRequest, KnowledgeQARequest, SPCAnalyzeRequest
 from .services import analyze_spc, answer_knowledge_question, audit_document, clear_runtime_cache, compare_documents, draft_deviation, ensure_seed_prompts, get_runtime_cache_status, ingest_documents, list_result_history, resolve_prompt, search_documents, suggest_version_candidates
 
-router = APIRouter(prefix="/api/v2", tags=["v2"])
+router = APIRouter(prefix="/api/v2", tags=["v2"], dependencies=[Depends(require_api_key)])
 
 
 

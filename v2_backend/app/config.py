@@ -43,6 +43,7 @@ class Settings:
     # ERP bridge — set ERP_BASE_URL to enable live resolution of ERP master data
     # e.g. "http://127.0.0.1:8000"  (erp_qms_core FastAPI instance)
     erp_base_url: str | None = (os.getenv("ERP_BASE_URL") or RUNTIME_CONFIG.get("erp_base_url") or None)  # type: ignore[assignment]
+    internal_api_key: str = (os.getenv("INTERNAL_API_KEY") or "").strip()
     allowed_origins: tuple[str, ...] = (
         "http://127.0.0.1:8888",
         "http://localhost:8888",
