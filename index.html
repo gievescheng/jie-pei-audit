@@ -28,6 +28,7 @@
   <div id="root"></div>
   <script type="text/babel" data-presets="react">
     const { useState, useEffect, useRef } = React;
+
 // ─── INITIAL DATA ─────────────────────────────────────────────────────────────
 // 儀器資料來源：5 量測資源管理程序/記錄/9.1量規儀器一覽表.docx
 // 校驗計畫：9.3 115年度校驗計劃表.docx
@@ -552,7 +553,11 @@ const GLASS_YIELD_DATA = [
   { period:"03/13~03/23", name:"3/9批",  input:626, ocr:0,   toWash:626, ok:529, ng:97,  tank1:9474, tank2:3574 },
   { period:"03/23~03/25", name:"3/10批", input:664, ocr:0,   toWash:664, ok:521, ng:143, tank1:664,  tank2:664,  note:"槽1換新藥水" },
   { period:"03/25~03/26", name:"3/12批", input:456, ocr:0,   toWash:456, ok:417, ng:39,  tank1:1145, tank2:1145 },
-];
+
+
+// 靜態初始資料已移至 00_constants.jsx，由 build_html.py 合併載入。
+// 此檔案保留 React import 以供後續 API hook 擴充使用。
+
 
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
