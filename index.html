@@ -553,7 +553,7 @@ const GLASS_YIELD_DATA = [
   { period:"03/13~03/23", name:"3/9批",  input:626, ocr:0,   toWash:626, ok:529, ng:97,  tank1:9474, tank2:3574 },
   { period:"03/23~03/25", name:"3/10批", input:664, ocr:0,   toWash:664, ok:521, ng:143, tank1:664,  tank2:664,  note:"槽1換新藥水" },
   { period:"03/25~03/26", name:"3/12批", input:456, ocr:0,   toWash:456, ok:417, ng:39,  tank1:1145, tank2:1145 },
-
+];
 
 // 靜態初始資料已移至 00_constants.jsx，由 build_html.py 合併載入。
 // 此檔案保留 React import 以供後續 API hook 擴充使用。
@@ -612,6 +612,98 @@ async function apiJson(url, options = {}) {
     throw new Error(payload.error || payload.message || `Request failed (${response.status})`);
   }
   return payload;
+}
+
+// ─── ERP 連線工具函式 ─────────────────────────────────────────────────────────
+const ERP_BASE = "http://127.0.0.1:8895";
+const QMS_V2_BASE = "http://127.0.0.1:8890";
+
+async function fetchErpList(resource, q = "") {
+  try {
+    const url = `${QMS_V2_BASE}/api/v2/erp/${resource}?limit=200${q ? "&q=" + encodeURIComponent(q) : ""}`;
+    const resp = await fetch(url);
+    const body = await resp.json();
+    return body.data?.items || [];
+  } catch (_) { return []; }
+}
+
+async function erpTryRefresh() {
+  const refresh = loadStoredState("erp_refresh_token", null);
+  if (!refresh) return false;
+  try {
+    const res = await fetch(`${ERP_BASE}/api/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refresh }),
+    });
+    if (!res.ok) return false;
+    const body = await res.json();
+    saveStoredState("erp_access_token",  body.data.access_token);
+    saveStoredState("erp_refresh_token", body.data.refresh_token);
+    return true;
+  } catch (_) { return false; }
+}
+
+async function erpApiJson(path, options = {}) {
+  async function doRequest(token) {
+    const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return fetch(`${ERP_BASE}${path}`, { ...options, headers });
+  }
+  let resp = await doRequest(getErpToken());
+  if (resp.status === 401) {
+    const refreshed = await erpTryRefresh();
+    if (refreshed) {
+      resp = await doRequest(getErpToken());
+    } else {
+      clearErpSession();
+      window.dispatchEvent(new CustomEvent("erp-session-expired"));
+      throw new Error("通行證已過期，請重新登入");
+    }
+  }
+  const body = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(body.detail || body.message || `錯誤 ${resp.status}`);
+  return body;
+}
+
+function getErpToken()  { return loadStoredState("erp_access_token", null); }
+function getErpUser()   { return loadStoredState("erp_user", null); }
+
+function saveErpSession(data) {
+  saveStoredState("erp_access_token",  data.access_token);
+  saveStoredState("erp_refresh_token", data.refresh_token);
+  saveStoredState("erp_user", { id: data.user_id, emp_no: data.emp_no, name: data.name, role_id: data.role_id });
+}
+
+function clearErpSession() {
+  ["erp_access_token", "erp_refresh_token", "erp_user"].forEach(k => {
+    try { window.localStorage.removeItem(k); } catch(_) {}
+  });
+}
+
+async function erpLogin(emp_no, password) {
+  const res = await fetch(`${ERP_BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ emp_no, password }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.detail || body.message || `登入失敗 (${res.status})`);
+  return body.data;
+}
+
+async function erpLogout() {
+  const refresh = loadStoredState("erp_refresh_token", null);
+  if (refresh) {
+    try {
+      await fetch(`${ERP_BASE}/api/auth/logout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refresh }),
+      });
+    } catch (_) {}
+  }
+  clearErpSession();
 }
 
 function downloadBlob(blob, filename) {
@@ -1805,7 +1897,7 @@ function SupplierTab({ suppliers, setSuppliers }) {
 
 
 // ─── NON-CONFORMANCE TAB (MP-15) ─────────────────────────────────────────────
-function NonConformanceTab({ nonConformances: items, setNonConformances: setItems, highlightNcId, onHighlightDone, expandNcId, onExpandDone }) {
+function NonConformanceTab({ nonConformances: items, setNonConformances: setItems, highlightNcId, onHighlightDone, expandNcId, onExpandDone, ncPrefill, setNcPrefill }) {
   const emptyDraft = { id:"", date:"", dept:"", type:"製程異常", description:"", severity:"輕微", rootCause:"", correctiveAction:"", responsible:"", dueDate:"", status:"待處理", closeDate:"", effectiveness:"" };
   const [modal, setModal] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -1815,6 +1907,13 @@ function NonConformanceTab({ nonConformances: items, setNonConformances: setItem
   const [importDraft, setImportDraft] = useState(null);
   const [importMissing, setImportMissing] = useState([]);
   const rowRefs = useRef({});
+
+  useEffect(() => {
+    if (!ncPrefill) return;
+    setDraft({ ...emptyDraft, ...ncPrefill });
+    setShowAdd(true);
+    setNcPrefill?.(null);
+  }, [ncPrefill]);
 
   useEffect(() => {
     if (!highlightNcId) return;
@@ -3841,7 +3940,7 @@ function AIWorkbenchTab({ documents, manuals, nonConformances }) {
   }, {});
 
   const [apiBase, setApiBase] = useState(() => loadStoredState("audit_v2_api_base", "http://127.0.0.1:8890/api/v2"));
-  const [serviceInfo, setServiceInfo] = useState({ service: "auto-audit-v2", database_mode: "unknown", openrouter_enabled: false });
+  const [serviceInfo, setServiceInfo] = useState({ service: "auto-audit-v2", database_mode: "unknown", openrouter_enabled: false, ollama_enabled: false, ollama_model: null });
   const [serviceMessage, setServiceMessage] = useState("");
   const [cacheBusy, setCacheBusy] = useState(false);
   const [cacheStatus, setCacheStatus] = useState({ compare_cache_count: 0, audit_cache_count: 0 });
@@ -3877,6 +3976,13 @@ function AIWorkbenchTab({ documents, manuals, nonConformances }) {
   const [qaBusy, setQaBusy] = useState(false);
   const [qaResult, setQaResult] = useState(null);
   const [qaMessage, setQaMessage] = useState("");
+  const [chatInput, setChatInput] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatHistory, setChatHistory] = useState([]);
+  const [chatMessage, setChatMessage] = useState("");
+  const [installedModels, setInstalledModels] = useState([]);
+  const [chatModel, setChatModel] = useState("");
+  const [chatUseDocs, setChatUseDocs] = useState(true);
   const [spcBusy, setSpcBusy] = useState(false);
   const [spcResult, setSpcResult] = useState(null);
   const [spcMessage, setSpcMessage] = useState("");
@@ -3943,6 +4049,8 @@ function AIWorkbenchTab({ documents, manuals, nonConformances }) {
         if (!cancelled) {
           setServiceInfo(payload.data || {});
           setServiceMessage("");
+          const models = (payload.data || {}).ollama_installed_models || [];
+          setInstalledModels(models);
         }
         const cachePayload = await callV2("/cache/status");
         if (!cancelled) {
@@ -4186,6 +4294,7 @@ function AIWorkbenchTab({ documents, manuals, nonConformances }) {
       setIngestMessage(`已完成 ${payload.data.ingested_count} 份文件匯入，失敗 ${payload.data.failed_count || 0} 份。`);
       const healthPayload = await callV2("/health");
       setServiceInfo(healthPayload.data || {});
+      setInstalledModels((healthPayload.data || {}).ollama_installed_models || []);
       const cachePayload = await callV2("/cache/status");
       setCacheStatus(cachePayload.data || {});
     } catch (err) {
@@ -4269,6 +4378,32 @@ function AIWorkbenchTab({ documents, manuals, nonConformances }) {
     }
   }
 
+  async function runChat() {
+    if (!chatInput.trim()) return;
+    const userMsg = chatInput.trim();
+    setChatInput("");
+    setChatBusy(true);
+    setChatMessage("");
+    setChatHistory(prev => [...prev, { role: "user", content: userMsg }]);
+    try {
+      const payload = await callV2("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userMsg, model: chatModel || undefined, use_docs: chatUseDocs }),
+      });
+      const reply = payload.data?.reply || "（無回應）";
+      const usedModel = payload.data?.model || "";
+      const docChunks = payload.data?.doc_chunks_used || 0;
+      const citations = payload.data?.citations || [];
+      setChatHistory(prev => [...prev, { role: "assistant", content: reply, model: usedModel, docChunks, citations }]);
+    } catch (err) {
+      setChatMessage("對話失敗：" + err.message);
+      setChatHistory(prev => [...prev, { role: "error", content: "對話失敗：" + err.message }]);
+    } finally {
+      setChatBusy(false);
+    }
+  }
+
   async function runSpcAnalyze() {
     setSpcBusy(true);
     setSpcMessage("");
@@ -4321,7 +4456,7 @@ function AIWorkbenchTab({ documents, manuals, nonConformances }) {
         <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
           <StatCard label="文件來源" value={sources.length} color="#38bdf8" sub="可直接送入文件稽核" />
           <StatCard label="資料庫模式" value={serviceInfo.database_mode || "unknown"} color={serviceInfo.database_mode === "postgresql" ? "#22c55e" : "#f59e0b"} sub={(serviceInfo.database_status && serviceInfo.database_status.using_fallback) ? "已退回 SQLite" : "正式資料庫已接線"} />
-          <StatCard label="LLM 狀態" value={serviceInfo.openrouter_enabled ? "已啟用" : "未啟用"} color={serviceInfo.openrouter_enabled ? "#22c55e" : "#64748b"} sub="規則引擎仍可獨立運作" />
+          <StatCard label="LLM 狀態" value={serviceInfo.openrouter_enabled ? "OpenRouter" : serviceInfo.ollama_enabled ? "Ollama" : "未啟用"} color={serviceInfo.openrouter_enabled || serviceInfo.ollama_enabled ? "#22c55e" : "#64748b"} sub={serviceInfo.ollama_enabled ? `${installedModels.length} 個模型已安裝` : "規則引擎仍可獨立運作"} />
         </div>
       </PageIntro>
 
@@ -4660,6 +4795,54 @@ function AIWorkbenchTab({ documents, manuals, nonConformances }) {
               <div style={{ fontSize:12, color:"#fef3c7", lineHeight:1.7 }}>{spcResult.management_summary}</div>
             </div>
           )}
+        </div>
+
+        <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(99,102,241,0.25)", borderRadius:14, padding:18 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:"#e2e8f0" }}>AI 直接對話</div>
+            {installedModels.length > 1 ? (
+              <select value={chatModel} onChange={e => setChatModel(e.target.value)} style={{ fontSize:11, background:"rgba(99,102,241,0.18)", border:"1px solid rgba(99,102,241,0.35)", borderRadius:999, padding:"2px 10px", color:"#a5b4fc", outline:"none", cursor:"pointer" }}>
+                <option value="" style={{ background:"#1e293b" }}>自動（預設）</option>
+                {installedModels.map(m => <option key={m.name} value={m.name} style={{ background:"#1e293b" }}>{m.name}{m.parameter_size ? ` (${m.parameter_size})` : ""}</option>)}
+              </select>
+            ) : (
+              <div style={{ fontSize:11, background:"rgba(99,102,241,0.18)", border:"1px solid rgba(99,102,241,0.35)", borderRadius:999, padding:"2px 10px", color:"#a5b4fc" }}>{serviceInfo.ollama_model || "Ollama"}</div>
+            )}
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+            <div style={{ fontSize:12, color:"#94a3b8" }}>{chatUseDocs ? "結合公司文件庫回答，並提供 ISO 9001 顧問建議。" : "純 LLM 對話，不參考文件庫。"}</div>
+            <button onClick={() => setChatUseDocs(v => !v)} style={{ fontSize:11, padding:"2px 10px", borderRadius:999, border:"1px solid " + (chatUseDocs ? "rgba(34,197,94,0.5)" : "rgba(148,163,184,0.3)"), background: chatUseDocs ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.05)", color: chatUseDocs ? "#4ade80" : "#64748b", cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>{chatUseDocs ? "✓ 結合文件庫" : "○ 純對話"}</button>
+          </div>
+          <div style={{ minHeight:180, maxHeight:340, overflowY:"auto", display:"flex", flexDirection:"column", gap:10, marginBottom:12, padding:chatHistory.length ? "8px 0" : 0 }}>
+            {chatHistory.length === 0 && <div style={{ fontSize:12, color:"#475569", textAlign:"center", padding:"40px 0" }}>尚無對話記錄</div>}
+            {chatHistory.map((msg, idx) => (
+              <div key={idx} style={{ display:"flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+                <div style={{ maxWidth:"80%", padding:"10px 14px", borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px", background: msg.role === "user" ? "rgba(99,102,241,0.25)" : msg.role === "error" ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.07)", border:"1px solid " + (msg.role === "user" ? "rgba(99,102,241,0.4)" : msg.role === "error" ? "rgba(239,68,68,0.3)" : "rgba(255,255,255,0.1)"), fontSize:13, color: msg.role === "error" ? "#fca5a5" : "#e2e8f0", lineHeight:1.7, whiteSpace:"pre-wrap" }}>
+                  {msg.content}
+                  {msg.role === "assistant" && msg.citations && msg.citations.length > 0 && (
+                    <div style={{ marginTop:8, display:"flex", flexWrap:"wrap", gap:4 }}>
+                      {msg.citations.map((c, ci) => (
+                        <span key={ci} style={{ fontSize:10, background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.3)", borderRadius:6, padding:"2px 6px", color:"#a5b4fc" }} title={c.section}>📄 {c.title.length > 20 ? c.title.substring(0,20)+"…" : c.title}</span>
+                      ))}
+                    </div>
+                  )}
+                  {msg.role === "assistant" && (msg.model || msg.docChunks > 0) && (
+                    <div style={{ fontSize:10, color:"#64748b", marginTop:4, textAlign:"right" }}>
+                      {msg.docChunks > 0 && <span style={{ marginRight:6 }}>📚 參考 {msg.docChunks} 段文件</span>}
+                      {msg.model && <span>{msg.model}</span>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {chatBusy && <div style={{ display:"flex", justifyContent:"flex-start" }}><div style={{ padding:"10px 14px", borderRadius:"14px 14px 14px 4px", background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)", fontSize:13, color:"#64748b" }}>思考中...</div></div>}
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <textarea value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runChat(); } }} placeholder="輸入問題，Enter 送出（Shift+Enter 換行）" style={{ ...inputStyle, flex:1, minHeight:44, resize:"none" }} rows={2} />
+            <button onClick={runChat} disabled={chatBusy || !chatInput.trim()} style={{ background:"linear-gradient(135deg,#6366f1,#818cf8)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"0 18px", fontSize:13, fontWeight:700, opacity: chatBusy || !chatInput.trim() ? 0.5 : 1, whiteSpace:"nowrap" }}>送出</button>
+          </div>
+          {chatHistory.length > 0 && <button onClick={() => setChatHistory([])} style={{ marginTop:8, background:"none", border:"none", color:"#475569", fontSize:11, cursor:"pointer" }}>清除對話記錄</button>}
+          {chatMessage && <div style={{ marginTop:8, fontSize:12, color:"#fca5a5" }}>{chatMessage}</div>}
         </div>
 
         <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:18 }}>
@@ -6464,6 +6647,765 @@ function KpiDashboard({ instruments, suppliers, nonConformances, auditPlans, env
 }
 
 
+// ─── ERP 主資料模組元件 ─────────────────────────────────────────────────────────
+const erpInputStyle = { width:"100%", padding:"9px 12px", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(148,163,184,0.18)", borderRadius:8, color:"#e2e8f0", fontSize:13, outline:"none" };
+
+function ErpWorkOrderPanel({ onNavigate, onCreateNc }) {
+  const [wos, setWos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("all");
+  const [q, setQ] = useState("");
+  const [editModal, setEditModal] = useState(null);
+  const [form, setForm] = useState({});
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetchErpList("work-orders").then(data => { setWos(data); setLoading(false); });
+  }, []);
+
+  const calcYield = wo => {
+    const total = (wo.good_qty || 0) + (wo.ng_qty || 0);
+    return total > 0 ? Math.round((wo.good_qty || 0) / total * 1000) / 10 : null;
+  };
+  const yieldColor = y => y === null ? "#64748b" : y >= 95 ? "#22c55e" : y >= 90 ? "#eab308" : "#ef4444";
+  const statusLabel = s => ({ draft:"草稿", released:"已下達", in_progress:"進行中", completed:"已完成", closed:"已關閉" }[s] || s);
+  const statusColor = s => ({ draft:"#64748b", released:"#60a5fa", in_progress:"#f97316", completed:"#22c55e", closed:"#94a3b8" }[s] || "#64748b");
+
+  const filtered = wos
+    .filter(w => filter === "all" || w.wo_status === filter)
+    .filter(w => !q || w.wo_no.toLowerCase().includes(q.toLowerCase()));
+
+  const yieldWos = wos.map(w => calcYield(w)).filter(y => y !== null);
+  const avgYield = yieldWos.length ? Math.round(yieldWos.reduce((a, b) => a + b, 0) / yieldWos.length * 10) / 10 : null;
+  const lowYieldCount = wos.filter(w => { const y = calcYield(w); return y !== null && y < 90; }).length;
+
+  async function handleUpdate() {
+    setBusy(true);
+    try {
+      await erpApiJson(`/api/orders/work-orders/${editModal.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ good_qty: parseFloat(form.good) || 0, ng_qty: parseFloat(form.ng) || 0, wo_status: form.status }),
+      });
+      setWos(prev => prev.map(w => w.id === editModal.id
+        ? { ...w, good_qty: parseFloat(form.good) || 0, ng_qty: parseFloat(form.ng) || 0, wo_status: form.status }
+        : w));
+      setEditModal(null);
+      setMsg("已更新工單數量。");
+    } catch(e) { setMsg("更新失敗：" + e.message); }
+    finally { setBusy(false); }
+  }
+
+  function openCreateNc(wo) {
+    const y = calcYield(wo);
+    onCreateNc?.({ type:"製程異常", description:`工單 ${wo.wo_no} 良率異常（${y}%）`, severity:"重大", wo_id: wo.id, wo_no: wo.wo_no, product_id: wo.product_id || "" });
+    onNavigate?.("nonconformance");
+  }
+
+  if (loading) return <div style={{ color:"#64748b", padding:40, textAlign:"center" }}>載入工單中...</div>;
+
+  return (
+    <div>
+      <SectionHeader title="工單良率管理" count={wos.length} color="#f97316" />
+      <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap" }}>
+        <StatCard label="進行中" value={wos.filter(w=>w.wo_status==="in_progress").length} color="#f97316" />
+        <StatCard label="已完成" value={wos.filter(w=>w.wo_status==="completed").length} color="#22c55e" />
+        <StatCard label="平均良率" value={avgYield !== null ? avgYield + "%" : "-"} color="#60a5fa" />
+        <StatCard label="良率 < 90%" value={lowYieldCount} color={lowYieldCount > 0 ? "#ef4444" : "#22c55e"} sub={lowYieldCount > 0 ? "需關注" : "無異常"} />
+      </div>
+      {msg && <div style={{ marginBottom:14, padding:"10px 16px", background:"rgba(99,102,241,0.1)", border:"1px solid rgba(99,102,241,0.3)", borderRadius:8, color:"#a5b4fc", fontSize:13 }}>{msg}</div>}
+      <div style={{ display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" }}>
+        <select value={filter} onChange={e=>setFilter(e.target.value)} style={{ ...erpInputStyle, width:130 }}>
+          <option value="all">全部狀態</option>
+          {["draft","released","in_progress","completed","closed"].map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
+        </select>
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="搜尋工單號..." style={{ ...erpInputStyle, width:180 }} />
+      </div>
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {filtered.length === 0 && <div style={{ color:"#64748b", fontSize:13, padding:20, textAlign:"center" }}>目前沒有符合條件的工單</div>}
+        {filtered.map(wo => {
+          const y = calcYield(wo);
+          const yc = yieldColor(y);
+          const total = (wo.good_qty || 0) + (wo.ng_qty || 0);
+          return (
+            <div key={wo.id} style={{ background: y !== null && y < 90 ? "rgba(239,68,68,0.06)" : "rgba(255,255,255,0.03)", border:`1px solid ${y !== null && y < 90 ? "rgba(239,68,68,0.25)" : "rgba(255,255,255,0.08)"}`, borderRadius:12, padding:"14px 18px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap", marginBottom:10 }}>
+                <div style={{ flex:1, minWidth:200 }}>
+                  <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4 }}>
+                    <span style={{ fontWeight:700, color:"#fb923c", fontFamily:"monospace", fontSize:13 }}>{wo.wo_no}</span>
+                    <Badge color={statusColor(wo.wo_status)}>{statusLabel(wo.wo_status)}</Badge>
+                  </div>
+                  <div style={{ fontSize:12, color:"#64748b" }}>計畫：{wo.planned_qty || 0} PCS　開始：{wo.start_date || "-"}　完成：{wo.finish_date || "-"}</div>
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => { setEditModal(wo); setForm({ good: wo.good_qty || 0, ng: wo.ng_qty || 0, status: wo.wo_status }); }} style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.14)", borderRadius:8, color:"#94a3b8", cursor:"pointer", padding:"6px 14px", fontSize:12 }}>更新數量</button>
+                  {y !== null && y < 90 && <button onClick={() => openCreateNc(wo)} style={{ background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.35)", borderRadius:8, color:"#fca5a5", cursor:"pointer", padding:"6px 14px", fontSize:12, fontWeight:600 }}>開立 NC</button>}
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:20, fontSize:12, color:"#94a3b8", marginBottom:8, flexWrap:"wrap" }}>
+                <span>良品：<b style={{ color:"#22c55e" }}>{wo.good_qty || 0}</b></span>
+                <span>不良：<b style={{ color:"#ef4444" }}>{wo.ng_qty || 0}</b></span>
+                <span>已入庫：<b style={{ color:"#60a5fa" }}>{total}</b> / {wo.planned_qty || 0}</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ flex:1, height:8, background:"rgba(255,255,255,0.07)", borderRadius:4, overflow:"hidden" }}>
+                  <div style={{ width: y !== null ? y + "%" : "0%", height:"100%", background:yc, borderRadius:4, transition:"width 0.4s" }} />
+                </div>
+                <span style={{ fontSize:13, fontWeight:700, color:yc, minWidth:48, textAlign:"right" }}>{y !== null ? y + "%" : "—"}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {editModal && (
+        <Modal title={`更新數量：${editModal.wo_no}`} onClose={() => setEditModal(null)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <div><div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>良品數量</div><input type="number" min="0" value={form.good} onChange={e=>setForm(p=>({...p,good:e.target.value}))} style={erpInputStyle} /></div>
+            <div><div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>不良品數量</div><input type="number" min="0" value={form.ng} onChange={e=>setForm(p=>({...p,ng:e.target.value}))} style={erpInputStyle} /></div>
+            <div><div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>工單狀態</div>
+              <select value={form.status} onChange={e=>setForm(p=>({...p,status:e.target.value}))} style={erpInputStyle}>
+                {["draft","released","in_progress","completed","closed"].map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
+              </select>
+            </div>
+            <div style={{ background:"rgba(249,115,22,0.08)", borderRadius:8, padding:10, fontSize:12, color:"#fb923c" }}>
+              良率預覽：{(() => { const g=parseFloat(form.good)||0; const n=parseFloat(form.ng)||0; const t=g+n; return t>0 ? Math.round(g/t*1000)/10+"%" : "—（尚無數量）"; })()}
+            </div>
+            <button onClick={handleUpdate} disabled={busy} style={{ background:"linear-gradient(135deg,#ea580c,#f97316)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"11px 24px", fontSize:14, fontWeight:700 }}>{busy ? "儲存中..." : "✓ 確認更新"}</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── 庫存管理面板 ─────────────────────────────────────────────────────────────
+function ErpInventoryPanel() {
+  const [invSub, setInvSub] = useState("locations");
+  const [locations, setLocations] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [balances, setBalances] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [txModal, setTxModal] = useState(false);
+  const [locModal, setLocModal] = useState(null);  // null=關閉, {}=新增, {id,...}=編輯
+  const [txForm, setTxForm] = useState({ trx_type:"IN", item_type:"product", item_ref_id:"", lot_no:"", qty:"", location_code:"", inventory_status:"available", trx_date:"" });
+  const [locForm, setLocForm] = useState({ location_code:"", location_name:"", location_type:"warehouse", is_hold_area:false });
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const loadAll = () => {
+    setLoading(true);
+    Promise.all([
+      erpApiJson("/api/inventory/locations?limit=100").then(r => setLocations(r.data?.items || [])),
+      erpApiJson("/api/inventory/transactions?limit=100").then(r => setTransactions(r.data?.items || [])),
+      erpApiJson("/api/inventory/balances").then(r => setBalances(r.data?.items || [])),
+    ]).finally(() => setLoading(false));
+  };
+  useEffect(loadAll, []);
+
+  async function handleAddTransaction() {
+    setBusy(true); setMsg("");
+    try {
+      await erpApiJson("/api/inventory/transactions", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ ...txForm, qty: parseFloat(txForm.qty) || 0, trx_date: txForm.trx_date || undefined }),
+      });
+      setTxModal(false);
+      setTxForm({ trx_type:"IN", item_type:"product", item_ref_id:"", lot_no:"", qty:"", location_code:"", inventory_status:"available", trx_date:"" });
+      setMsg("交易記錄已新增。");
+      erpApiJson("/api/inventory/transactions?limit=100").then(r => setTransactions(r.data?.items || []));
+      erpApiJson("/api/inventory/balances").then(r => setBalances(r.data?.items || []));
+    } catch(e) { setMsg("新增失敗：" + e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function handleSaveLocation() {
+    setBusy(true); setMsg("");
+    try {
+      if (locModal.id) {
+        await erpApiJson(`/api/inventory/locations/${locModal.id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify(locForm) });
+      } else {
+        await erpApiJson("/api/inventory/locations", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(locForm) });
+      }
+      setLocModal(null);
+      setMsg(locModal.id ? "已更新位置。" : "已新增位置。");
+      erpApiJson("/api/inventory/locations?limit=100").then(r => setLocations(r.data?.items || []));
+    } catch(e) { setMsg("操作失敗：" + e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function handleDeleteLocation(id) {
+    if (!window.confirm("確定刪除此庫存位置？")) return;
+    try {
+      await erpApiJson(`/api/inventory/locations/${id}`, { method:"DELETE" });
+      setLocations(prev => prev.filter(l => l.id !== id));
+      setMsg("已刪除位置。");
+    } catch(e) { setMsg("刪除失敗：" + e.message); }
+  }
+
+  const invSubTabs = [{ id:"locations",label:"庫存位置",color:"#06b6d4"},{id:"transactions",label:"交易記錄",color:"#8b5cf6"},{id:"balances",label:"庫存結餘",color:"#22c55e"}];
+  const trxTypeLabel = t => ({ IN:"入庫", OUT:"出庫", SCRAP:"報廢", QC:"品管", MOVE:"移倉" }[t] || t);
+  const invStatusLabel = s => ({ available:"可用", hold:"待檢", blocked:"禁用" }[s] || s);
+  const invStatusColor = s => ({ available:"#22c55e", hold:"#eab308", blocked:"#ef4444" }[s] || "#64748b");
+
+  if (loading) return <div style={{ color:"#64748b", padding:40, textAlign:"center" }}>載入庫存資料中...</div>;
+
+  return (
+    <div>
+      <SectionHeader title="庫存管理" count={locations.length} color="#06b6d4" />
+      {msg && <div style={{ marginBottom:14, padding:"10px 16px", background:"rgba(6,182,212,0.08)", border:"1px solid rgba(6,182,212,0.25)", borderRadius:8, color:"#22d3ee", fontSize:13 }}>{msg}</div>}
+      <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap" }}>
+        {invSubTabs.map(t => (
+          <button key={t.id} onClick={() => setInvSub(t.id)} style={{ padding:"7px 18px", borderRadius:8, fontSize:13, fontWeight:700, cursor:"pointer", background: invSub===t.id ? `rgba(${t.id==="locations"?"6,182,212":t.id==="transactions"?"139,92,246":"34,197,94"},0.2)` : "rgba(255,255,255,0.05)", border:`1px solid ${invSub===t.id?t.color+"66":"rgba(255,255,255,0.1)"}`, color: invSub===t.id ? t.color : "#64748b" }}>{t.label}</button>
+        ))}
+      </div>
+
+      {invSub === "locations" && (
+        <div>
+          <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:12 }}>
+            <button onClick={() => { setLocModal({}); setLocForm({ location_code:"", location_name:"", location_type:"warehouse", is_hold_area:false }); }} style={{ background:"linear-gradient(135deg,#0891b2,#06b6d4)", border:"none", borderRadius:8, color:"#fff", cursor:"pointer", padding:"8px 18px", fontSize:13, fontWeight:700 }}>新增位置</button>
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {locations.map(loc => (
+              <div key={loc.id} style={{ background:"rgba(255,255,255,0.03)", border:`1px solid ${loc.is_hold_area?"rgba(234,179,8,0.3)":"rgba(255,255,255,0.08)"}`, borderRadius:10, padding:"12px 16px", display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontWeight:700, color:"#e2e8f0", fontSize:13 }}>{loc.location_name}</div>
+                  <div style={{ fontSize:11, color:"#64748b", marginTop:2 }}>{loc.location_code} · {loc.location_type}</div>
+                </div>
+                {loc.is_hold_area && <Badge color="#eab308">待檢區</Badge>}
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => { setLocModal(loc); setLocForm({ location_code:loc.location_code, location_name:loc.location_name, location_type:loc.location_type, is_hold_area:loc.is_hold_area }); }} style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.14)", borderRadius:6, color:"#94a3b8", cursor:"pointer", padding:"5px 12px", fontSize:12 }}>編輯</button>
+                  <button onClick={() => handleDeleteLocation(loc.id)} style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.25)", borderRadius:6, color:"#fca5a5", cursor:"pointer", padding:"5px 12px", fontSize:12 }}>刪除</button>
+                </div>
+              </div>
+            ))}
+            {locations.length === 0 && <div style={{ color:"#64748b", fontSize:13, padding:20, textAlign:"center" }}>尚無庫存位置，請先新增</div>}
+          </div>
+        </div>
+      )}
+
+      {invSub === "transactions" && (
+        <div>
+          <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:12 }}>
+            <button onClick={() => setTxModal(true)} style={{ background:"linear-gradient(135deg,#7c3aed,#8b5cf6)", border:"none", borderRadius:8, color:"#fff", cursor:"pointer", padding:"8px 18px", fontSize:13, fontWeight:700 }}>新增交易</button>
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {transactions.map(tx => (
+              <div key={tx.id} style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, padding:"12px 16px", display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                <div style={{ minWidth:80 }}><Badge color={tx.trx_type==="IN"?"#22c55e":tx.trx_type==="SCRAP"?"#ef4444":"#60a5fa"}>{trxTypeLabel(tx.trx_type)}</Badge></div>
+                <div style={{ flex:1, minWidth:160 }}>
+                  <div style={{ fontSize:12, fontFamily:"monospace", color:"#94a3b8" }}>{tx.trx_no}</div>
+                  <div style={{ fontSize:11, color:"#64748b", marginTop:2 }}>{tx.item_type} · {tx.location_code || "-"} · {tx.lot_no || "無批號"}</div>
+                </div>
+                <div style={{ textAlign:"right", minWidth:80 }}>
+                  <div style={{ fontWeight:700, color: tx.qty >= 0 ? "#22c55e" : "#ef4444", fontSize:14 }}>{tx.qty >= 0 ? "+" : ""}{tx.qty}</div>
+                  <div style={{ fontSize:11, color:"#64748b" }}>{tx.trx_date || "-"}</div>
+                </div>
+                <Badge color={invStatusColor(tx.inventory_status)}>{invStatusLabel(tx.inventory_status)}</Badge>
+              </div>
+            ))}
+            {transactions.length === 0 && <div style={{ color:"#64748b", fontSize:13, padding:20, textAlign:"center" }}>尚無交易記錄</div>}
+          </div>
+        </div>
+      )}
+
+      {invSub === "balances" && (
+        <div>
+          <div style={{ display:"flex", gap:12, marginBottom:16, flexWrap:"wrap" }}>
+            <StatCard label="可用庫存" value={balances.filter(b=>b.inventory_status==="available").reduce((s,b)=>s+b.balance,0)} color="#22c55e" />
+            <StatCard label="待檢庫存" value={balances.filter(b=>b.inventory_status==="hold").reduce((s,b)=>s+b.balance,0)} color="#eab308" sub="待品管放行" />
+            <StatCard label="禁用庫存" value={balances.filter(b=>b.inventory_status==="blocked").reduce((s,b)=>s+b.balance,0)} color="#ef4444" />
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {balances.map((b, i) => (
+              <div key={i} style={{ background:`rgba(${b.inventory_status==="hold"?"234,179,8":b.inventory_status==="blocked"?"239,68,68":"34,197,94"},0.05)`, border:`1px solid rgba(${b.inventory_status==="hold"?"234,179,8":b.inventory_status==="blocked"?"239,68,68":"34,197,94"},0.2)`, borderRadius:10, padding:"12px 16px", display:"flex", alignItems:"center", gap:14 }}>
+                <Badge color={invStatusColor(b.inventory_status)}>{invStatusLabel(b.inventory_status)}</Badge>
+                <div style={{ flex:1, fontSize:12, color:"#94a3b8" }}>{b.item_type} · {b.item_ref_id?.slice(0,8) || "-"} · {b.location_code || "—"}</div>
+                <div style={{ fontWeight:800, fontSize:18, color: invStatusColor(b.inventory_status) }}>{b.balance}</div>
+              </div>
+            ))}
+            {balances.length === 0 && <div style={{ color:"#64748b", fontSize:13, padding:20, textAlign:"center" }}>尚無庫存結餘資料</div>}
+          </div>
+        </div>
+      )}
+
+      {txModal && (
+        <Modal title="新增庫存交易" onClose={() => setTxModal(false)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:13 }}>
+            <div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>交易類型</div>
+              <select value={txForm.trx_type} onChange={e=>setTxForm(p=>({...p,trx_type:e.target.value}))} style={erpInputStyle}>
+                {["IN","OUT","SCRAP","QC","MOVE"].map(t=><option key={t} value={t}>{trxTypeLabel(t)}</option>)}
+              </select>
+            </div>
+            <div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>項目類型</div>
+              <select value={txForm.item_type} onChange={e=>setTxForm(p=>({...p,item_type:e.target.value}))} style={erpInputStyle}>
+                {["product","material","work_order"].map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>項目 ID / 參考編號</div><input value={txForm.item_ref_id} onChange={e=>setTxForm(p=>({...p,item_ref_id:e.target.value}))} style={erpInputStyle} placeholder="產品/物料/工單 UUID" /></div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+              <div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>數量（OUT/SCRAP 填負數）</div><input type="number" value={txForm.qty} onChange={e=>setTxForm(p=>({...p,qty:e.target.value}))} style={erpInputStyle} /></div>
+              <div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>庫存狀態</div>
+                <select value={txForm.inventory_status} onChange={e=>setTxForm(p=>({...p,inventory_status:e.target.value}))} style={erpInputStyle}>
+                  {["available","hold","blocked"].map(s=><option key={s} value={s}>{invStatusLabel(s)}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+              <div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>地點代碼</div>
+                <select value={txForm.location_code} onChange={e=>setTxForm(p=>({...p,location_code:e.target.value}))} style={erpInputStyle}>
+                  <option value="">（選擇地點）</option>
+                  {locations.map(l=><option key={l.id} value={l.location_code}>{l.location_name}</option>)}
+                </select>
+              </div>
+              <div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>批號</div><input value={txForm.lot_no} onChange={e=>setTxForm(p=>({...p,lot_no:e.target.value}))} style={erpInputStyle} placeholder="選填" /></div>
+            </div>
+            <div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>交易日期（留空＝今日）</div><input type="date" value={txForm.trx_date} onChange={e=>setTxForm(p=>({...p,trx_date:e.target.value}))} style={erpInputStyle} /></div>
+            <button onClick={handleAddTransaction} disabled={busy} style={{ background:"linear-gradient(135deg,#7c3aed,#8b5cf6)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"11px 24px", fontSize:14, fontWeight:700 }}>{busy?"新增中...":"✓ 確認新增"}</button>
+          </div>
+        </Modal>
+      )}
+
+      {locModal !== null && (
+        <Modal title={locModal.id ? "編輯庫存位置" : "新增庫存位置"} onClose={() => setLocModal(null)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:13 }}>
+            <div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>位置代碼（必填）</div><input value={locForm.location_code} onChange={e=>setLocForm(p=>({...p,location_code:e.target.value}))} style={erpInputStyle} /></div>
+            <div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>位置名稱（必填）</div><input value={locForm.location_name} onChange={e=>setLocForm(p=>({...p,location_name:e.target.value}))} style={erpInputStyle} /></div>
+            <div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>位置類型</div>
+              <select value={locForm.location_type} onChange={e=>setLocForm(p=>({...p,location_type:e.target.value}))} style={erpInputStyle}>
+                {["warehouse","production","qc","hold","scrap"].map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:"#e2e8f0", cursor:"pointer" }}>
+              <input type="checkbox" checked={locForm.is_hold_area} onChange={e=>setLocForm(p=>({...p,is_hold_area:e.target.checked}))} style={{ width:15, height:15, accentColor:"#eab308" }} />
+              標示為待檢區（品管用）
+            </label>
+            <button onClick={handleSaveLocation} disabled={busy} style={{ background:"linear-gradient(135deg,#0891b2,#06b6d4)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"11px 24px", fontSize:14, fontWeight:700 }}>{busy?"儲存中...":"✓ 確認儲存"}</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/**
+ * ErpResourcePanel — 通用 ERP 主資料面板
+ * @param {string}   apiPath   ERP API 路徑，例如 "/api/master/products"
+ * @param {string}   title     區塊標題
+ * @param {string}   color     主題色
+ * @param {Array}    columns   表格欄位 [{ key, label, render? }]
+ * @param {Array}    formFields 表單欄位 [{ key, label, type, options? }]
+ * @param {Object}   emptyForm 空白表單預設值
+ */
+function ErpResourcePanel({ apiPath, title, color, columns, formFields, emptyForm }) {
+  const [rows, setRows]     = useState([]);
+  const [total, setTotal]   = useState(0);
+  const [q, setQ]           = useState("");
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg]       = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [editRow, setEditRow] = useState(null);   // null = add, object = edit
+  const [form, setForm]     = useState(emptyForm);
+  const [busy, setBusy]     = useState(false);
+
+  async function load(search = q) {
+    setLoading(true);
+    try {
+      const body = await erpApiJson(`${apiPath}?limit=100&q=${encodeURIComponent(search)}`);
+      setRows(body.data?.items || []);
+      setTotal(body.data?.total ?? (body.data?.items?.length ?? 0));
+    } catch (e) { setMsg("讀取失敗：" + e.message); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  function openAdd() { setForm(emptyForm); setEditRow(null); setShowAdd(true); setMsg(""); }
+  function openEdit(row) {
+    const f = {};
+    formFields.forEach(({ key }) => { f[key] = row[key] ?? ""; });
+    setForm(f); setEditRow(row); setShowAdd(true); setMsg("");
+  }
+
+  async function handleSave() {
+    setBusy(true); setMsg("");
+    try {
+      if (editRow) {
+        await erpApiJson(`${apiPath}/${editRow.id}`, { method:"PATCH", body: JSON.stringify(form) });
+        setMsg("已更新。");
+      } else {
+        await erpApiJson(apiPath, { method:"POST", body: JSON.stringify(form) });
+        setMsg("已新增。");
+      }
+      setShowAdd(false);
+      load();
+    } catch (e) { setMsg("存檔失敗：" + e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function handleDelete(row) {
+    if (!window.confirm(`確定要刪除「${row[columns[1]?.key] || row.id}」嗎？`)) return;
+    setBusy(true);
+    try {
+      await erpApiJson(`${apiPath}/${row.id}`, { method:"DELETE" });
+      setMsg("已刪除。");
+      load();
+    } catch (e) { setMsg("刪除失敗：" + e.message); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14, flexWrap:"wrap", gap:10 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ width:4, height:20, borderRadius:2, background:color }} />
+          <span style={{ fontSize:16, fontWeight:800, color:"#e2e8f0" }}>{title}</span>
+          <span style={{ fontSize:12, color:"#64748b" }}>共 {total} 筆</span>
+        </div>
+        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key==="Enter" && load(q)}
+            placeholder="關鍵字搜尋…" style={{ ...erpInputStyle, width:180 }} />
+          <button onClick={() => load(q)} style={{ padding:"8px 14px", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:8, color:"#94a3b8", cursor:"pointer", fontSize:12 }}>搜尋</button>
+          <button onClick={openAdd} style={{ padding:"8px 16px", background:`linear-gradient(135deg,${color},${color}cc)`, border:"none", borderRadius:8, color:"#fff", cursor:"pointer", fontSize:12, fontWeight:700 }}>+ 新增</button>
+        </div>
+      </div>
+      {msg && <div style={{ padding:"8px 12px", background: msg.includes("失敗") ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)", border:`1px solid ${msg.includes("失敗") ? "rgba(239,68,68,0.3)" : "rgba(34,197,94,0.3)"}`, borderRadius:8, fontSize:12, color: msg.includes("失敗") ? "#fca5a5" : "#86efac", marginBottom:10 }}>{msg}</div>}
+      <div style={{ overflowX:"auto", borderRadius:12, border:"1px solid rgba(255,255,255,0.07)" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead>
+            <tr style={{ background:"rgba(255,255,255,0.04)" }}>
+              {columns.map(col => <th key={col.key} style={{ textAlign:"left", padding:"10px 14px", color:"#64748b", fontWeight:600, whiteSpace:"nowrap", borderBottom:"1px solid rgba(255,255,255,0.07)" }}>{col.label}</th>)}
+              <th style={{ padding:"10px 14px", borderBottom:"1px solid rgba(255,255,255,0.07)", width:100 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={columns.length + 1} style={{ padding:24, textAlign:"center", color:"#64748b" }}>讀取中…</td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={columns.length + 1} style={{ padding:24, textAlign:"center", color:"#64748b" }}>尚無資料，請點「新增」建立第一筆。</td></tr>
+            ) : rows.map((row, i) => (
+              <tr key={row.id} style={{ background: i%2===0 ? "transparent" : "rgba(255,255,255,0.02)", transition:"background 0.15s" }}>
+                {columns.map(col => <td key={col.key} style={{ padding:"10px 14px", color:"#e2e8f0", borderBottom:"1px solid rgba(255,255,255,0.04)" }}>{col.render ? col.render(row[col.key], row) : (row[col.key] ?? "—")}</td>)}
+                <td style={{ padding:"10px 14px", borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
+                  <div style={{ display:"flex", gap:6 }}>
+                    <button onClick={() => openEdit(row)} style={{ padding:"4px 10px", background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:6, color:"#94a3b8", cursor:"pointer", fontSize:11 }}>編輯</button>
+                    <button onClick={() => handleDelete(row)} style={{ padding:"4px 10px", background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.25)", borderRadius:6, color:"#fca5a5", cursor:"pointer", fontSize:11 }}>刪除</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {showAdd && (
+        <Modal title={editRow ? `編輯 ${title}` : `新增 ${title}`} onClose={() => setShowAdd(false)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            {formFields.map(({ key, label, type, options }) => (
+              <div key={key}>
+                <div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>{label}</div>
+                {options ? (
+                  <select value={form[key] ?? ""} onChange={e => setForm({...form, [key]: e.target.value})} style={erpInputStyle}>
+                    {options.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : (
+                  <input type={type || "text"} value={form[key] ?? ""} onChange={e => setForm({...form, [key]: e.target.value})} style={erpInputStyle} />
+                )}
+              </div>
+            ))}
+            <button onClick={handleSave} disabled={busy}
+              style={{ padding:"11px 24px", background:`linear-gradient(135deg,${color},${color}cc)`, border:"none", borderRadius:10, color:"#fff", cursor: busy ? "not-allowed" : "pointer", fontSize:14, fontWeight:700, marginTop:4, opacity: busy ? 0.6 : 1 }}>
+              {busy ? "儲存中…" : editRow ? "確認更新" : "確認新增"}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function ErpUserPanel() {
+  const emptyForm = { emp_no:"", name:"", email:"", password:"", role_id:"" };
+  const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [editModal, setEditModal] = useState(null);
+  const [resetModal, setResetModal] = useState(null);
+  const [form, setForm] = useState(emptyForm);
+  const [resetPwd, setResetPwd] = useState("");
+  const [busy, setBusy] = useState("");
+
+  useEffect(() => { loadAll(); }, []);
+
+  async function loadAll() {
+    setLoading(true);
+    try {
+      const [uRes, rRes] = await Promise.all([
+        erpApiJson("/api/auth/users"),
+        erpApiJson("/api/master/roles"),
+      ]);
+      setUsers(uRes.data?.items || []);
+      setRoles(rRes.data?.items || []);
+    } catch(err) { setMessage("載入失敗：" + err.message); }
+    finally { setLoading(false); }
+  }
+
+  async function handleAdd() {
+    if (!form.emp_no.trim() || !form.name.trim() || !form.password) { setMessage("員工編號、姓名、密碼為必填"); return; }
+    setBusy("add");
+    try {
+      await erpApiJson("/api/auth/users", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(form) });
+      setMessage("已新增使用者。"); setShowAdd(false); setForm(emptyForm); loadAll();
+    } catch(err) { setMessage("新增失敗：" + err.message); } finally { setBusy(""); }
+  }
+
+  async function handleUpdateRole(user, role_id) {
+    try {
+      await erpApiJson("/api/auth/users/" + user.id, { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ role_id: role_id || null }) });
+      setMessage("角色已更新。"); setEditModal(null); loadAll();
+    } catch(err) { setMessage("更新失敗：" + err.message); }
+  }
+
+  async function handleToggleActive(user) {
+    try {
+      await erpApiJson("/api/auth/users/" + user.id, { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ is_active: !user.is_active }) });
+      setMessage(user.is_active ? "帳號已停用。" : "帳號已啟用。"); setEditModal(null); loadAll();
+    } catch(err) { setMessage("操作失敗：" + err.message); }
+  }
+
+  async function handleResetPwd() {
+    if (!resetPwd.trim()) { setMessage("新密碼不可空白"); return; }
+    setBusy("reset");
+    try {
+      await erpApiJson("/api/auth/users/" + resetModal.id + "/reset-password", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ new_password: resetPwd }) });
+      setMessage("密碼已重設。"); setResetModal(null); setResetPwd("");
+    } catch(err) { setMessage("重設失敗：" + err.message); } finally { setBusy(""); }
+  }
+
+  async function handleDelete(user) {
+    if (!window.confirm(`確定要刪除帳號「${user.emp_no} ${user.name}」嗎？此操作無法還原。`)) return;
+    try {
+      await erpApiJson("/api/auth/users/" + user.id, { method:"DELETE" });
+      setMessage("已刪除帳號。"); setEditModal(null); loadAll();
+    } catch(err) { setMessage("刪除失敗：" + err.message); }
+  }
+
+  const activeCount = users.filter(u => u.is_active).length;
+
+  return (
+    <div>
+      <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap" }}>
+        <StatCard label="全部帳號" value={users.length} color="#6366f1" />
+        <StatCard label="啟用中" value={activeCount} color="#22c55e" />
+        <StatCard label="已停用" value={users.length - activeCount} color="#64748b" />
+        <StatCard label="角色數" value={roles.length} color="#8b5cf6" />
+      </div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}>
+        <div style={{ fontSize:12, color:"#94a3b8" }}>{message || "管理系統帳號、指派角色、重設密碼。"}</div>
+        <button onClick={() => { setShowAdd(true); setForm(emptyForm); setMessage(""); }} style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"9px 18px", fontSize:13, fontWeight:700 }}>新增帳號</button>
+      </div>
+      {loading ? <div style={{ color:"#64748b", fontSize:13, padding:20 }}>載入中...</div> : (
+        <div style={{ overflowX:"auto" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+            <thead><tr>{["員工編號","姓名","Email","角色","狀態","操作"].map(h=>(
+              <th key={h} style={{ textAlign:"left", padding:"10px 12px", color:"#64748b", fontWeight:600, borderBottom:"1px solid rgba(255,255,255,0.06)", whiteSpace:"nowrap" }}>{h}</th>
+            ))}</tr></thead>
+            <tbody>
+              {users.map((u,i) => (
+                <tr key={u.id} style={{ background:i%2===0?"rgba(255,255,255,0.02)":"transparent" }}>
+                  <td style={{ padding:"10px 12px", color:"#818cf8", fontWeight:700, fontFamily:"monospace" }}>{u.emp_no}</td>
+                  <td style={{ padding:"10px 12px", color:"#e2e8f0", fontWeight:600 }}>{u.name}</td>
+                  <td style={{ padding:"10px 12px", color:"#64748b", fontSize:12 }}>{u.email || "—"}</td>
+                  <td style={{ padding:"10px 12px" }}><Badge color="#8b5cf6">{u.role_name || "未指派"}</Badge></td>
+                  <td style={{ padding:"10px 12px" }}><Badge color={u.is_active?"#22c55e":"#64748b"}>{u.is_active?"啟用":"停用"}</Badge></td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <div style={{ display:"flex", gap:6 }}>
+                      <button onClick={()=>setEditModal(u)} style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:6, color:"#94a3b8", cursor:"pointer", padding:"4px 10px", fontSize:11 }}>管理</button>
+                      <button onClick={()=>{setResetModal(u);setResetPwd("");setMessage("");}} style={{ background:"rgba(99,102,241,0.1)", border:"1px solid rgba(99,102,241,0.25)", borderRadius:6, color:"#a5b4fc", cursor:"pointer", padding:"4px 10px", fontSize:11 }}>重設密碼</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {users.length===0 && <div style={{ color:"#64748b", fontSize:13, padding:20, textAlign:"center" }}>尚無帳號資料</div>}
+        </div>
+      )}
+      {showAdd && (
+        <Modal title="新增系統帳號" onClose={()=>setShowAdd(false)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            {[["員工編號（必填）","emp_no","text"],["姓名（必填）","name","text"],["Email","email","email"],["登入密碼（必填）","password","password"]].map(([label,key,type])=>(
+              <div key={key}><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>{label}</div>
+              <input type={type} value={form[key]} onChange={e=>setForm(f=>({...f,[key]:e.target.value}))} style={inputStyle} /></div>
+            ))}
+            <div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>角色（系統權限）</div>
+              <select value={form.role_id} onChange={e=>setForm(f=>({...f,role_id:e.target.value}))} style={inputStyle}>
+                <option value="">— 不指派 —</option>
+                {roles.map(r=><option key={r.id} value={r.id}>{r.role_name}</option>)}
+              </select>
+            </div>
+            <button onClick={handleAdd} disabled={busy==="add"} style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"12px 24px", fontSize:15, fontWeight:700, marginTop:8, opacity:busy==="add"?0.6:1 }}>
+              {busy==="add"?"新增中...":"確認新增"}
+            </button>
+          </div>
+        </Modal>
+      )}
+      {editModal && (
+        <Modal title={`管理帳號：${editModal.emp_no}`} onClose={()=>setEditModal(null)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            {[["員工編號",editModal.emp_no],["姓名",editModal.name],["Email",editModal.email||"—"],["目前狀態",editModal.is_active?"啟用中":"已停用"]].map(([k,v])=>(
+              <div key={k} style={{ display:"flex", gap:12 }}><div style={{ fontSize:12, color:"#64748b", minWidth:80 }}>{k}</div><div style={{ color:"#e2e8f0", fontWeight:600, fontSize:13 }}>{v}</div></div>
+            ))}
+            <div><div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>角色</div>
+              <select defaultValue={editModal.role_id} onChange={e=>handleUpdateRole(editModal, e.target.value)} style={inputStyle}>
+                <option value="">— 不指派 —</option>
+                {roles.map(r=><option key={r.id} value={r.id}>{r.role_name}</option>)}
+              </select>
+            </div>
+            <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:8 }}>
+              <button onClick={()=>handleToggleActive(editModal)} style={{ background:editModal.is_active?"rgba(239,68,68,0.14)":"rgba(34,197,94,0.14)", border:`1px solid ${editModal.is_active?"rgba(239,68,68,0.3)":"rgba(34,197,94,0.3)"}`, borderRadius:10, color:editModal.is_active?"#fca5a5":"#86efac", cursor:"pointer", padding:"12px 20px", fontSize:13, fontWeight:700 }}>
+                {editModal.is_active?"停用帳號":"啟用帳號"}
+              </button>
+              <button onClick={()=>handleDelete(editModal)} style={{ background:"rgba(239,68,68,0.14)", border:"1px solid rgba(239,68,68,0.28)", borderRadius:10, color:"#fca5a5", cursor:"pointer", padding:"12px 20px", fontSize:13, fontWeight:700 }}>刪除帳號</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {resetModal && (
+        <Modal title={`重設密碼：${resetModal.emp_no} ${resetModal.name}`} onClose={()=>setResetModal(null)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            <div style={{ background:"rgba(250,204,21,0.08)", border:"1px solid rgba(250,204,21,0.2)", borderRadius:8, padding:10, fontSize:12, color:"#fde68a" }}>重設後舊密碼立即失效，請通知帳號擁有者。</div>
+            <div><div style={{ fontSize:12, color:"#64748b", marginBottom:5 }}>新密碼</div>
+              <input type="password" value={resetPwd} onChange={e=>setResetPwd(e.target.value)} placeholder="請輸入新密碼" style={inputStyle} /></div>
+            <button onClick={handleResetPwd} disabled={busy==="reset"} style={{ background:"linear-gradient(135deg,#4f46e5,#6366f1)", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", padding:"12px 24px", fontSize:15, fontWeight:700, opacity:busy==="reset"?0.6:1 }}>
+              {busy==="reset"?"重設中...":"確認重設密碼"}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function ErpMasterTab({ setActiveTab, setNcPrefill }) {
+  const [sub, setSub] = useState("products");
+
+  const subTabs = [
+    { id:"products",    label:"產品",     color:"#3b82f6" },
+    { id:"customers",   label:"客戶",     color:"#10b981" },
+    { id:"suppliers",   label:"供應商",   color:"#f59e0b" },
+    { id:"departments", label:"部門",     color:"#8b5cf6" },
+    { id:"workorders",  label:"工單管理", color:"#f97316" },
+    { id:"inventory",   label:"庫存管理", color:"#06b6d4" },
+    { id:"users",       label:"使用者",   color:"#6366f1" },
+  ];
+
+  const configs = {
+    products: {
+      apiPath: "/api/master/products",
+      title: "產品主檔",
+      color: "#3b82f6",
+      columns: [
+        { key:"product_code",  label:"產品編號" },
+        { key:"product_name",  label:"產品名稱" },
+        { key:"customer_part_no", label:"客戶料號" },
+        { key:"internal_part_no", label:"內部料號" },
+        { key:"status", label:"狀態", render: v => <span style={{ color: v==="active"?"#22c55e":"#94a3b8" }}>{v==="active"?"啟用":"停用"}</span> },
+      ],
+      formFields: [
+        { key:"product_code",     label:"產品編號（必填）" },
+        { key:"product_name",     label:"產品名稱（必填）" },
+        { key:"customer_part_no", label:"客戶料號" },
+        { key:"internal_part_no", label:"內部料號" },
+        { key:"spec_summary",     label:"規格摘要" },
+      ],
+      emptyForm: { product_code:"", product_name:"", customer_part_no:"", internal_part_no:"", spec_summary:"" },
+    },
+    customers: {
+      apiPath: "/api/master/customers",
+      title: "客戶主檔",
+      color: "#10b981",
+      columns: [
+        { key:"customer_code", label:"客戶編號" },
+        { key:"customer_name", label:"客戶名稱" },
+        { key:"short_name",    label:"簡稱" },
+        { key:"status", label:"狀態", render: v => <span style={{ color: v==="active"?"#22c55e":"#94a3b8" }}>{v==="active"?"啟用":"停用"}</span> },
+      ],
+      formFields: [
+        { key:"customer_code", label:"客戶編號（必填）" },
+        { key:"customer_name", label:"客戶名稱（必填）" },
+        { key:"short_name",    label:"簡稱" },
+      ],
+      emptyForm: { customer_code:"", customer_name:"", short_name:"" },
+    },
+    suppliers: {
+      apiPath: "/api/master/suppliers",
+      title: "供應商主檔",
+      color: "#f59e0b",
+      columns: [
+        { key:"supplier_code", label:"供應商編號" },
+        { key:"supplier_name", label:"供應商名稱" },
+        { key:"category",      label:"類別" },
+        { key:"status", label:"狀態", render: v => <span style={{ color: v==="active"?"#22c55e":"#94a3b8" }}>{v==="active"?"啟用":"停用"}</span> },
+      ],
+      formFields: [
+        { key:"supplier_code", label:"供應商編號（必填）" },
+        { key:"supplier_name", label:"供應商名稱（必填）" },
+        { key:"category",      label:"類別", type:"text" },
+      ],
+      emptyForm: { supplier_code:"", supplier_name:"", category:"" },
+    },
+    departments: {
+      apiPath: "/api/master/departments",
+      title: "部門主檔",
+      color: "#8b5cf6",
+      columns: [
+        { key:"dept_code", label:"部門代碼" },
+        { key:"dept_name", label:"部門名稱" },
+        { key:"is_active", label:"狀態", render: v => <span style={{ color: v?"#22c55e":"#94a3b8" }}>{v?"啟用":"停用"}</span> },
+      ],
+      formFields: [
+        { key:"dept_code", label:"部門代碼（必填）" },
+        { key:"dept_name", label:"部門名稱（必填）" },
+      ],
+      emptyForm: { dept_code:"", dept_name:"" },
+    },
+  };
+
+  const cfg = configs[sub];
+
+  return (
+    <div>
+      <div style={{ marginBottom:24 }}>
+        <div style={{ fontSize:22, fontWeight:800, color:"#e2e8f0", marginBottom:4 }}>ERP 主資料管理</div>
+        <div style={{ fontSize:13, color:"#64748b" }}>新增或修改產品、客戶、供應商、部門等基本資料，供各模組使用。</div>
+      </div>
+      <div style={{ display:"flex", gap:8, marginBottom:24, flexWrap:"wrap" }}>
+        {subTabs.map(t => (
+          <button key={t.id} onClick={() => setSub(t.id)} style={{
+            padding:"8px 20px", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer", transition:"all 0.2s",
+            background: sub===t.id ? `linear-gradient(135deg,${t.color},${t.color}cc)` : "rgba(255,255,255,0.04)",
+            border: sub===t.id ? "none" : "1px solid rgba(255,255,255,0.1)",
+            color: sub===t.id ? "#fff" : "#64748b",
+            boxShadow: sub===t.id ? `0 4px 14px ${t.color}40` : "none",
+          }}>{t.label}</button>
+        ))}
+      </div>
+      {sub === "users"
+        ? <ErpUserPanel />
+        : sub === "workorders"
+        ? <ErpWorkOrderPanel onNavigate={setActiveTab} onCreateNc={setNcPrefill} />
+        : sub === "inventory"
+        ? <ErpInventoryPanel />
+        : <ErpResourcePanel key={sub} {...cfg} />}
+    </div>
+  );
+}
+
+// ─── KPI 目標設定 Modal ───────────────────────────────────────────────────────
+
+
 // ─── DASHBOARD HOME ───────────────────────────────────────────────────────────
 function DashboardHome({ instruments, documents, training, equipment, suppliers, nonConformances, auditPlans, envRecords, setActiveTab }) {
   const now = new Date(); now.setHours(0,0,0,0);
@@ -6559,7 +7501,7 @@ function DashboardHome({ instruments, documents, training, equipment, suppliers,
 
 // ─── 角色可見分頁定義 ────────────────────────────────────────────────────────
 const ROLE_TABS = {
-  qms:        ["home","kpi","spc","calibration","documents","library","training","equipment","supplier","nonconformance","auditplan","environment","production","notification","aiworkbench","report"],
+  qms:        ["home","kpi","spc","calibration","documents","library","training","equipment","supplier","nonconformance","auditplan","environment","production","notification","aiworkbench","report","erpmaster"],
   executive:  ["home","kpi","spc"],
   supervisor: ["home","kpi","spc","nonconformance","environment","production"],
   auditor:    ["home","calibration","documents","library","nonconformance","auditplan","report"],
@@ -6775,6 +7717,7 @@ function App() {
   const [nonConformances, setNonConformances] = useState(initialNonConformances);
   const [highlightNcId, setHighlightNcId] = useState(null);
   const [expandNcId, setExpandNcId] = useState(null);
+  const [ncPrefill, setNcPrefill] = useState(null);
   const [auditPlans, setAuditPlans] = useState(initialAuditPlans);
   const [envRecords, setEnvRecords] = useState(initialEnvRecords);
   const [prodRecords, setProdRecords] = useState(() => loadStoredState("audit_prodrecords", initialProdRecords));
@@ -6835,6 +7778,7 @@ function App() {
     { id: "notification",   label: "通知提醒",   icon: "✉" },
     { id: "aiworkbench",    label: "AI 工作台",  icon: "AI" },
     { id: "report",         label: "稽核報告",   icon: "☰" },
+    { id: "erpmaster",      label: "ERP 主資料",  icon: "⊞" },
   ];
   const tabs = allTabs.filter(t => allowedTabs.includes(t.id));
 
@@ -6851,13 +7795,14 @@ function App() {
       case "training":       return <TrainingTab training={training} setTraining={setTraining} />;
       case "equipment":      return <EquipmentTab equipment={equipment} setEquipment={setEquipment} />;
       case "supplier":       return <SupplierTab suppliers={suppliers} setSuppliers={setSuppliers} />;
-      case "nonconformance": return <NonConformanceTab nonConformances={nonConformances} setNonConformances={setNonConformances} highlightNcId={highlightNcId} onHighlightDone={() => setHighlightNcId(null)} expandNcId={expandNcId} onExpandDone={() => setExpandNcId(null)} />;
+      case "nonconformance": return <NonConformanceTab nonConformances={nonConformances} setNonConformances={setNonConformances} highlightNcId={highlightNcId} onHighlightDone={() => setHighlightNcId(null)} expandNcId={expandNcId} onExpandDone={() => setExpandNcId(null)} ncPrefill={ncPrefill} setNcPrefill={setNcPrefill} />;
       case "auditplan":      return <AuditPlanTab auditPlans={auditPlans} setAuditPlans={setAuditPlans} />;
       case "environment":    return <EnvironmentTab envRecords={envRecords} setEnvRecords={setEnvRecords} />;
       case "production":     return <PageErrorBoundary pageName="記錄匯出" storageKeys={["audit_prodrecords", "audit_qualityrecords"]}><ProductionTab envRecords={envRecords} prodRecords={prodRecords} setProdRecords={setProdRecords} qualityRecords={qualityRecords} setQualityRecords={setQualityRecords} nonConformances={nonConformances} auditPlans={auditPlans} setActiveTab={setTabSafe} setHighlightNcId={setHighlightNcId} setExpandNcId={setExpandNcId} /></PageErrorBoundary>;
       case "notification":   return <NotificationTab instruments={instruments} documents={documents} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} />;
       case "aiworkbench":    return <AIWorkbenchTab documents={documents} manuals={manuals} nonConformances={nonConformances} />;
       case "report":         return <ReportTab instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} />;
+      case "erpmaster":      return <ErpMasterTab setActiveTab={setTabSafe} setNcPrefill={setNcPrefill} />;
       default:               return <DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setTabSafe} />;
     }
   }

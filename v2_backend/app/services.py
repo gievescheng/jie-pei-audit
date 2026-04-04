@@ -301,7 +301,7 @@ def audit_document(session, request) -> dict:
     else:
         summary = f"文件 {document.title} 已通過目前規則檢查，未偵測到必要章節缺漏，但仍建議人工覆核版面與簽核欄位。"
 
-    llm_summary = adapters.maybe_call_openrouter(
+    llm_summary = adapters.call_llm(
         system_prompt=prompt["system_prompt"],
         policy_prompt=prompt["policy_prompt"],
         user_prompt=(
@@ -311,6 +311,7 @@ def audit_document(session, request) -> dict:
             + "\n\nDocument title: "
             + document.title
         ),
+        task_type="doc_audit",
     )
     if llm_summary:
         summary = llm_summary
@@ -406,7 +407,7 @@ def analyze_spc(session, request) -> dict:
         request.parameter_name, metrics, abnormal_items
     )
 
-    llm_summary = adapters.maybe_call_openrouter(
+    llm_summary = adapters.call_llm(
         system_prompt=prompt["system_prompt"],
         policy_prompt=prompt["policy_prompt"],
         user_prompt=(
@@ -416,6 +417,7 @@ def analyze_spc(session, request) -> dict:
             + "\n\nNelson Signals:\n"
             + json.dumps(imr_result["nelson_signals"], ensure_ascii=False, indent=2)
         ),
+        task_type="spc_analyze",
     )
     if llm_summary:
         management_summary = llm_summary
@@ -441,7 +443,7 @@ def draft_deviation(session, request) -> dict:
     query = " ".join([request.issue_description, request.process_step, request.lot_no]).strip()
     citations = repositories.search_chunks(session, query, limit=5) if query else []
 
-    llm_summary = adapters.maybe_call_openrouter(
+    llm_summary = adapters.call_llm(
         system_prompt=prompt["system_prompt"],
         policy_prompt=prompt["policy_prompt"],
         user_prompt=(
@@ -451,6 +453,7 @@ def draft_deviation(session, request) -> dict:
             + "\n\nIssue:\n"
             + request.issue_description
         ),
+        task_type="deviation_analyze",
     )
     draft["draft_summary"] = llm_summary or "此輸出為異常調查草稿，僅供人工覆核與轉入 CAPA/8D 前的整理依據。"
 
@@ -477,7 +480,7 @@ def answer_knowledge_question(session, request) -> dict:
     prompt = resolve_prompt(session, "knowledge_qa")
     scoped_document = _load_or_ingest_single_document(session, request) if (getattr(request, "document_id", None) or getattr(request, "path", None)) else None
     scoped_document_ids = [scoped_document.id] if scoped_document else None
-    citations = repositories.search_chunks(session, request.question, limit=request.limit, document_ids=scoped_document_ids)
+    citations = repositories.search_chunks(session, request.question, limit=max(request.limit, 15), document_ids=scoped_document_ids)
 
     if not citations:
         scope_label = scoped_document.title if scoped_document else "目前知識庫"
@@ -498,7 +501,7 @@ def answer_knowledge_question(session, request) -> dict:
         fallback_lines.append(f"- {item['title']}: {item['content'][:120]}")
     answer = "根據目前檢索到的文件片段，整理如下：\n" + "\n".join(fallback_lines)
 
-    llm_answer = adapters.maybe_call_openrouter(
+    llm_answer = adapters.call_llm(
         system_prompt=prompt["system_prompt"],
         policy_prompt=prompt["policy_prompt"],
         user_prompt=(
@@ -521,6 +524,7 @@ def answer_knowledge_question(session, request) -> dict:
                 indent=2,
             )
         ),
+        task_type="knowledge_qa",
     )
     if llm_answer:
         answer = llm_answer
@@ -547,6 +551,68 @@ def answer_knowledge_question(session, request) -> dict:
         "needs_human_review": True,
     }
 
+
+
+def answer_with_doc_context(
+    session,
+    message: str,
+    system_prompt: str = "",
+    model_override: str | None = None,
+    chunk_limit: int = 15,
+) -> dict:
+    """RAG-enhanced chat: search docs first, then ask LLM with context + analytical role."""
+    chunks = repositories.search_chunks(session, message, limit=chunk_limit)
+
+    if chunks:
+        context_parts = [
+            f"【來源：{c['title']}｜{c['section_name']}】\n{c['content']}"
+            for c in chunks[:12]
+        ]
+        context_block = "\n\n---\n\n".join(context_parts)
+        rag_system = (
+            (system_prompt + "\n\n" if system_prompt else "")
+            + "你是潔沛企業的 ISO 9001:2015 品質管理顧問。"
+            "請先以公司文件中的事實為依據，再結合 ISO 9001:2015 最佳實務，"
+            "提供具體、可操作的分析與改善建議。"
+            "若問題超出文件範圍，仍可引用 ISO 標準給出顧問意見，並清楚標示「顧問建議」與「文件規定」的差異。"
+            "回答使用繁體中文，條列式呈現，結尾提供可執行的改善行動項目。"
+        )
+        rag_user = (
+            "以下是從公司文件庫中檢索到的相關段落：\n\n"
+            + context_block
+            + "\n\n---\n\n請根據上方文件內容及 ISO 9001:2015 專業知識，回答以下問題：\n\n"
+            + message
+        )
+    else:
+        rag_system = (
+            (system_prompt + "\n\n" if system_prompt else "")
+            + "你是潔沛企業的 ISO 9001:2015 品質管理顧問。"
+            "公司文件庫中未找到與此問題直接相關的文件，請根據 ISO 9001:2015 最佳實務提供通用顧問建議，"
+            "並在回答中說明建議來自 ISO 標準而非公司內部文件。"
+            "回答使用繁體中文，條列式呈現。"
+        )
+        rag_user = message
+
+    result = adapters.call_llm(
+        system_prompt=rag_system,
+        policy_prompt="",
+        user_prompt=rag_user,
+        task_type="rag_chat",
+        model_override=model_override,
+    )
+
+    return {
+        "reply": result,
+        "doc_chunks_used": len(chunks),
+        "citations": [
+            {
+                "title": c["title"],
+                "section": c["section_name"],
+                "page_no": c["page_no"],
+            }
+            for c in chunks[:6]
+        ],
+    }
 
 
 def compare_documents(session, request) -> dict:
@@ -610,7 +676,7 @@ def compare_documents(session, request) -> dict:
     tool_outputs_used = ["document_rule_engine", "text_diff"]
     llm_summary = None
     if getattr(request, "use_llm", False):
-        llm_summary = adapters.maybe_call_openrouter(
+        llm_summary = adapters.call_llm(
             system_prompt=prompt["system_prompt"],
             policy_prompt=prompt["policy_prompt"],
             user_prompt=(
@@ -630,6 +696,7 @@ def compare_documents(session, request) -> dict:
                     indent=2,
                 )
             ),
+            task_type="doc_compare",
         )
         if llm_summary:
             summary = llm_summary
