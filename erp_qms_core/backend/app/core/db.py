@@ -63,6 +63,9 @@ def create_dev_schema() -> None:
     engine, _ = _get_engine()
     Base.metadata.create_all(bind=engine)
 
+    from .seed import seed_dev
+    seed_dev()
+
 
 def reset_engine() -> None:
     """Force recreation of the engine. Use in tests to pick up a new DB URL."""

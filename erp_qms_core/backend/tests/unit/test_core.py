@@ -76,51 +76,70 @@ class TestRequestContext(unittest.TestCase):
         self.assertEqual(results["t2"], "user_B")
 
 
-class TestSecurity(unittest.TestCase):
-    """Password hashing and verification — no external dependencies."""
+class TestPasswordHash(unittest.TestCase):
+    """bcrypt 雜湊行為驗證。"""
 
-    def setUp(self):
+    def test_hash_and_verify_correct_password(self):
         from erp_qms_core.backend.app.core.security import hash_password, verify_password
-        self.hash_password = hash_password
-        self.verify_password = verify_password
+        hashed = hash_password("correct-password")
+        self.assertTrue(verify_password("correct-password", hashed))
 
-    def test_hash_is_deterministic(self):
-        h1 = self.hash_password("secret123")
-        h2 = self.hash_password("secret123")
-        self.assertEqual(h1, h2)
+    def test_wrong_password_fails(self):
+        from erp_qms_core.backend.app.core.security import hash_password, verify_password
+        hashed = hash_password("correct-password")
+        self.assertFalse(verify_password("wrong-password", hashed))
 
-    def test_hash_is_hex_string(self):
-        h = self.hash_password("password")
-        # SHA-256 → 64 hex chars
-        self.assertEqual(len(h), 64)
-        self.assertTrue(all(c in "0123456789abcdef" for c in h))
+    def test_empty_password_handled_safely(self):
+        from erp_qms_core.backend.app.core.security import hash_password, verify_password
+        hashed = hash_password("")
+        self.assertTrue(verify_password("", hashed))
+        self.assertFalse(verify_password("not-empty", hashed))
 
-    def test_different_passwords_produce_different_hashes(self):
-        h1 = self.hash_password("abc")
-        h2 = self.hash_password("ABC")
+    def test_two_hashes_of_same_password_differ(self):
+        """bcrypt 每次加鹽不同，兩次雜湊結果不應相同。"""
+        from erp_qms_core.backend.app.core.security import hash_password
+        h1 = hash_password("same-password")
+        h2 = hash_password("same-password")
         self.assertNotEqual(h1, h2)
 
-    def test_verify_correct_password(self):
-        hashed = self.hash_password("qms1234")
-        self.assertTrue(self.verify_password("qms1234", hashed))
-
-    def test_verify_wrong_password(self):
-        hashed = self.hash_password("qms1234")
-        self.assertFalse(self.verify_password("wrong_pass", hashed))
-
-    def test_verify_empty_string_against_non_empty(self):
-        hashed = self.hash_password("something")
-        self.assertFalse(self.verify_password("", hashed))
-
-    def test_hash_empty_string(self):
-        h = self.hash_password("")
-        self.assertEqual(len(h), 64)
-        self.assertTrue(self.verify_password("", h))
-
     def test_unicode_password(self):
-        h = self.hash_password("密碼測試123")
-        self.assertTrue(self.verify_password("密碼測試123", h))
-        self.assertFalse(self.verify_password("密碼測試124", h))
+        from erp_qms_core.backend.app.core.security import hash_password, verify_password
+        hashed = hash_password("密碼測試123")
+        self.assertTrue(verify_password("密碼測試123", hashed))
+        self.assertFalse(verify_password("密碼測試124", hashed))
+
+
+class TestJWT(unittest.TestCase):
+    """JWT 簽發與驗證。測試前需設定 ERP_QMS_CORE_JWT_SECRET。"""
+
+    def setUp(self):
+        import os
+        os.environ["ERP_QMS_CORE_JWT_SECRET"] = "test-secret-for-unit-test-only"
+
+    def test_create_and_decode_token(self):
+        from erp_qms_core.backend.app.core.security import create_token, decode_token
+        payload = {"sub": "user-uuid-001", "role": "qm", "name": "測試使用者"}
+        token = create_token(payload)
+        decoded = decode_token(token)
+        self.assertIsNotNone(decoded)
+        self.assertEqual(decoded["sub"], "user-uuid-001")
+        self.assertEqual(decoded["role"], "qm")
+
+    def test_invalid_token_returns_none(self):
+        from erp_qms_core.backend.app.core.security import decode_token
+        self.assertIsNone(decode_token("not-a-valid-token"))
+        self.assertIsNone(decode_token(""))
+
+    def test_expired_token_returns_none(self):
+        import datetime
+        from erp_qms_core.backend.app.core.security import create_token, decode_token
+        payload = {
+            "sub": "user-uuid-002",
+            "role": "qm",
+            "exp": datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=1),
+        }
+        token = create_token(payload)
+        self.assertIsNone(decode_token(token))
 
 
 class TestResponses(unittest.TestCase):

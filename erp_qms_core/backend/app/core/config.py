@@ -32,5 +32,19 @@ class _Settings:
             f"sqlite:///{DEFAULT_DB.as_posix()}",
         )
 
+    @property
+    def jwt_secret(self) -> str:
+        secret = os.getenv("ERP_QMS_CORE_JWT_SECRET", "")
+        if not secret:
+            raise RuntimeError(
+                "ERP_QMS_CORE_JWT_SECRET 未設定。"
+                " 請在 .env 或環境變數中設定一個隨機字串（至少 32 字元）。"
+            )
+        return secret
+
+    @property
+    def token_expire_minutes(self) -> int:
+        return int(os.getenv("ERP_QMS_CORE_TOKEN_EXPIRE_MINUTES", "480"))  # 預設 8 小時
+
 
 settings = _Settings()

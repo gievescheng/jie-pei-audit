@@ -9,3 +9,5 @@ requests
 python-docx
 openpyxl
 pypdf
+PyJWT>=2.8.0
+bcrypt>=4.1.0

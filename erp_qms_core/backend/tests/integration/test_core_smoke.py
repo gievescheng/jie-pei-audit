@@ -289,5 +289,95 @@ class ERPQMSCoreSmokeTest(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 422)
 
 
+class AuthSmokeTest(unittest.TestCase):
+    """驗證 login → token → 保護路由的完整流程。"""
+
+    def setUp(self):
+        import os
+        import tempfile
+        from pathlib import Path
+        self.tmpdir = tempfile.TemporaryDirectory()
+        db_path = Path(self.tmpdir.name) / "auth.db"
+        os.environ["ERP_QMS_CORE_DATABASE_URL"] = f"sqlite:///{db_path.as_posix()}"
+        os.environ["ERP_QMS_CORE_JWT_SECRET"] = "test-secret-auth-smoke-32chars!!"
+
+        from erp_qms_core.backend.app.core import db as db_module
+        db_module.reset_engine()
+        db_module.create_dev_schema()
+
+        from erp_qms_core.backend.app.main import app
+        from fastapi.testclient import TestClient
+        self.client = TestClient(app)
+
+        # 建立額外的測試使用者（qm 角色）
+        from erp_qms_core.backend.app.core.security import hash_password
+        from erp_qms_core.backend.app.core.db import session_scope
+        from erp_qms_core.backend.app.models.master import Role, User
+        with session_scope() as s:
+            role = s.get(Role, "role-qm-000")
+            if role is None:
+                role = Role(id="role-qm-000", role_code="qm", role_name="品管人員")
+                s.add(role)
+            if not s.query(User).filter(User.emp_no == "T001").first():
+                user = User(
+                    id="user-test-001",
+                    emp_no="T001",
+                    name="測試品管",
+                    role_id="role-qm-000",
+                    password_hash=hash_password("test-password"),
+                    is_active=True,
+                )
+                s.add(user)
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def test_login_success_returns_token(self):
+        resp = self.client.post("/api/auth/login",
+                                json={"emp_no": "T001", "password": "test-password"})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("access_token", data)
+        self.assertEqual(data["token_type"], "bearer")
+        self.assertEqual(data["user"]["emp_no"], "T001")
+
+    def test_login_wrong_password_returns_401(self):
+        resp = self.client.post("/api/auth/login",
+                                json={"emp_no": "T001", "password": "wrong"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_login_unknown_user_returns_401(self):
+        resp = self.client.post("/api/auth/login",
+                                json={"emp_no": "nobody", "password": "x"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_protected_route_without_token_returns_401(self):
+        resp = self.client.get("/api/master/customers")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_protected_route_with_valid_token_succeeds(self):
+        login_resp = self.client.post("/api/auth/login",
+                                      json={"emp_no": "T001", "password": "test-password"})
+        token = login_resp.json()["access_token"]
+        resp = self.client.get("/api/master/customers",
+                               headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(resp.status_code, 200)
+
+    def test_token_contains_correct_role(self):
+        login_resp = self.client.post("/api/auth/login",
+                                      json={"emp_no": "T001", "password": "test-password"})
+        token = login_resp.json()["access_token"]
+        import jwt
+        payload = jwt.decode(token, options={"verify_signature": False})
+        self.assertEqual(payload["role"], "qm")
+
+    def test_admin_login_with_seed_user(self):
+        """seed_dev() 建立的 ADMIN 帳號可以正常登入。"""
+        resp = self.client.post("/api/auth/login",
+                                json={"emp_no": "ADMIN", "password": "admin1234"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["user"]["role_code"], "admin")
+
+
 if __name__ == "__main__":
     unittest.main()
