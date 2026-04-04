@@ -1,0 +1,5 @@
+requests>=2.28
+transformers>=4.30.0
+torch>=2.0.0
+accelerate>=0.20.3
+# 可選: 如果只要呼叫本地 HTTP 伺服器，僅需 requests
