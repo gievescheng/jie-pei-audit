@@ -24,8 +24,17 @@ QUESTION_FILLERS = [
     "的",
     "嗎",
     "呢",
+    "有沒有",
+    "可以",
+    "需要",
+    "應該",
+    "整個",
+    "目前",
+    "請",
+    "告訴我",
+    "說明",
+    "介紹",
 ]
-
 
 
 def build_search_terms(query: str) -> list[str]:
@@ -33,15 +42,30 @@ def build_search_terms(query: str) -> list[str]:
     for token in QUESTION_FILLERS:
         cleaned = cleaned.replace(token, " ")
     cleaned = re.sub(r"[^\w\u4e00-\u9fff]+", " ", cleaned)
-    terms = []
-    seen = set()
+
+    terms: list[str] = []
+    seen: set[str] = set()
+
+    def _add(t: str) -> None:
+        t = t.strip()
+        if len(t) >= 2 and t not in seen:
+            seen.add(t)
+            terms.append(t)
+
     for part in cleaned.split():
-        term = part.strip()
-        if len(term) < 2 or term in seen:
-            continue
-        seen.add(term)
-        terms.append(term)
-    return terms
+        _add(part)
+        # For Chinese segments generate 4-char and 2-char n-grams so
+        # near-synonyms (評選/評鑑) still share partial overlap
+        if re.search(r"[\u4e00-\u9fff]", part) and len(part) >= 4:
+            for n in (4, 3, 2):
+                for i in range(len(part) - n + 1):
+                    _add(part[i : i + n])
+
+    # Also try the raw query stripped of spaces as one big term
+    raw = re.sub(r"\s+", "", query)
+    _add(raw)
+
+    return terms[:20]
 
 
 
@@ -116,10 +140,19 @@ def search_chunks(session: Session, query: str, limit: int = 8, document_ids: li
     if terms:
         clauses = [models.DocumentChunk.content.ilike(f"%{term}%") for term in terms]
         stmt = stmt.where(or_(*clauses))
-    rows = session.execute(stmt.limit(limit * 3)).all()
+    rows = session.execute(stmt.limit(limit * 6)).all()
     results = []
+    seen_chunks: set[str] = set()
     for chunk, title, source_path in rows:
-        score = sum(chunk.content.lower().count(term.lower()) for term in terms) if terms else 1
+        if chunk.id in seen_chunks:
+            continue
+        seen_chunks.add(chunk.id)
+        content_lower = chunk.content.lower()
+        # Weight longer matching terms higher to prefer specific matches
+        score = sum(
+            content_lower.count(term.lower()) * len(term)
+            for term in terms
+        ) if terms else 1
         results.append(
             {
                 "document_id": chunk.document_id,

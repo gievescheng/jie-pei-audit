@@ -4,15 +4,17 @@ import json
 import uuid
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 
+from .adapters import call_llm, list_ollama_models, ollama_available
 from .audit import write_audit_log
 from .auth import require_api_key
-from .config import settings
+from .config import MODEL_ROUTING, settings
 from .db import get_database_status, session_scope
 from .exports import build_document_audit_docx, build_document_compare_docx, build_document_compare_workbook
 from .schemas import DeviationDraftRequest, DocumentAuditRequest, DocumentCompareRequest, DocumentIngestRequest, DocumentVersionCandidatesRequest, KnowledgeQARequest, SPCAnalyzeRequest
-from .services import analyze_spc, answer_knowledge_question, audit_document, clear_runtime_cache, compare_documents, draft_deviation, ensure_seed_prompts, get_runtime_cache_status, ingest_documents, list_compare_history, list_result_history, resolve_prompt, search_documents, suggest_version_candidates
+from .services import analyze_spc, answer_knowledge_question, answer_with_doc_context, audit_document, clear_runtime_cache, compare_documents, draft_deviation, ensure_seed_prompts, get_runtime_cache_status, ingest_documents, list_compare_history, list_result_history, resolve_prompt, search_documents, suggest_version_candidates
 
 router = APIRouter(prefix="/api/v2", tags=["v2"], dependencies=[Depends(require_api_key)])
 
@@ -48,6 +50,10 @@ def health():
             "database_mode": db_status["active_database_mode"],
             "database_status": db_status,
             "openrouter_enabled": bool(settings.openrouter_api_key),
+            "ollama_enabled": ollama_available(),
+            "ollama_model": settings.ollama_model if ollama_available() else None,
+            "ollama_installed_models": list_ollama_models() if ollama_available() else [],
+            "model_routing": MODEL_ROUTING,
         },
         message="healthy",
     )
@@ -356,6 +362,52 @@ def knowledge_qa(payload: KnowledgeQARequest):
         return _ok(data, message="knowledge qa complete", trace_id=trace_id)
     except Exception as exc:
         return _error(str(exc), error_code="knowledge_qa_failed", trace_id=trace_id)
+
+
+class ChatRequest(BaseModel):
+    message: str
+    system_prompt: str = "你是潔沛企業的 ISO 9001 品質管理助理，請用繁體中文回答，回答要簡潔專業。"
+    model: str | None = None
+    use_docs: bool = True
+
+
+@router.post("/chat")
+def chat(payload: ChatRequest):
+    trace_id = str(uuid.uuid4())
+    try:
+        from .config import resolve_model_for_task
+        if payload.use_docs:
+            with session_scope() as session:
+                ensure_seed_prompts(session)
+                rag_result = answer_with_doc_context(
+                    session,
+                    message=payload.message,
+                    system_prompt=payload.system_prompt,
+                    model_override=payload.model,
+                )
+            result = rag_result.get("reply")
+            doc_chunks_used = rag_result.get("doc_chunks_used", 0)
+            citations = rag_result.get("citations", [])
+        else:
+            result = call_llm(
+                system_prompt=payload.system_prompt,
+                policy_prompt="",
+                user_prompt=payload.message,
+                task_type="chat",
+                model_override=payload.model,
+            )
+            doc_chunks_used = 0
+            citations = []
+        if result is None:
+            return _error("LLM 未設定或無法連線", error_code="llm_unavailable", trace_id=trace_id)
+        actual_model, _ = resolve_model_for_task("rag_chat" if payload.use_docs else "chat", payload.model)
+        return _ok(
+            {"reply": result, "model": actual_model, "doc_chunks_used": doc_chunks_used, "citations": citations},
+            message="ok",
+            trace_id=trace_id,
+        )
+    except Exception as exc:
+        return _error(str(exc), error_code="chat_failed", trace_id=trace_id)
 
 
 @router.get("/prompts/runtime/resolve")

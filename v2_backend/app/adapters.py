@@ -283,3 +283,80 @@ def maybe_call_openrouter(*, system_prompt: str, policy_prompt: str, user_prompt
         if not choices:
             return None
         return (((choices[0] or {}).get("message") or {}).get("content") or "").strip() or None
+
+
+def maybe_call_ollama(*, system_prompt: str, policy_prompt: str, user_prompt: str,
+                      model: str | None = None, timeout_seconds: int | None = None) -> str | None:
+    if not settings.ollama_base_url:
+        return None
+    combined_system = (system_prompt + "\n" + policy_prompt).strip()
+    payload = {
+        "model": model or settings.ollama_model,
+        "messages": [
+            {"role": "system", "content": combined_system},
+            {"role": "user", "content": user_prompt},
+        ],
+        "stream": False,
+        "temperature": 0.2,
+    }
+    try:
+        read_timeout = float(timeout_seconds or settings.ollama_timeout)
+        timeout = httpx.Timeout(connect=10.0, read=read_timeout, write=30.0, pool=10.0)
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(
+                f"{settings.ollama_base_url.rstrip('/')}/v1/chat/completions",
+                headers={"Content-Type": "application/json"},
+                json=payload,
+            )
+            response.raise_for_status()
+            body = response.json()
+            choices = body.get("choices") or []
+            if not choices:
+                return None
+            msg = (choices[0] or {}).get("message") or {}
+            content = (msg.get("content") or "").strip()
+            if not content:
+                content = (msg.get("reasoning") or "").strip()
+            return content or None
+    except Exception:
+        return None
+
+
+def call_llm(*, system_prompt: str, policy_prompt: str = "", user_prompt: str,
+             task_type: str | None = None, model_override: str | None = None) -> str | None:
+    """OpenRouter 優先，若未設定則依 task_type 路由到對應 Ollama 模型。"""
+    from .config import resolve_model_for_task
+    result = maybe_call_openrouter(system_prompt=system_prompt, policy_prompt=policy_prompt, user_prompt=user_prompt)
+    if result:
+        return result
+    model, timeout = resolve_model_for_task(task_type, model_override)
+    return maybe_call_ollama(system_prompt=system_prompt, policy_prompt=policy_prompt,
+                             user_prompt=user_prompt, model=model, timeout_seconds=timeout)
+
+
+def ollama_available() -> bool:
+    """快速檢查 Ollama 是否可連線。"""
+    try:
+        with httpx.Client(timeout=3) as client:
+            r = client.get(f"{settings.ollama_base_url.rstrip('/')}/api/tags")
+            return r.status_code == 200
+    except Exception:
+        return False
+
+
+def list_ollama_models() -> list[dict]:
+    """查詢 Ollama 已安裝模型清單。"""
+    try:
+        with httpx.Client(timeout=5) as client:
+            r = client.get(f"{settings.ollama_base_url.rstrip('/')}/api/tags")
+            r.raise_for_status()
+            return [
+                {
+                    "name": m.get("name", ""),
+                    "size": m.get("size", 0),
+                    "parameter_size": m.get("details", {}).get("parameter_size", ""),
+                }
+                for m in r.json().get("models", [])
+            ]
+    except Exception:
+        return []
