@@ -1689,12 +1689,26 @@ function DocumentsTab({ documents, setDocuments }) {
     const draft = await processFile(file);
     setNewDoc(prev => ({ ...prev, ...draft }));
   }
-  function handleSingleAdd() {
+  async function handleSingleAdd() {
     if (!newDoc.id.trim()||!newDoc.name.trim()||!newDoc.department.trim()||!newDoc.createdDate) {
       setErr("請填寫所有必填欄位：文件編號、名稱、制定部門、制定日期"); return;
     }
     setErr("");
-    setDocuments(prev => [...prev, { ...newDoc, retentionYears: parseInt(newDoc.retentionYears)||16 }]);
+    const docObj = { ...newDoc, retentionYears: parseInt(newDoc.retentionYears)||16 };
+    // 同步到 ERP API（失敗時僅本地更新，不阻斷操作）
+    try {
+      await erpApiJson("/api/documents", {
+        method: "POST",
+        body: JSON.stringify({
+          doc_no: docObj.id, doc_name: docObj.name, doc_type: docObj.type || "管理程序",
+          version: docObj.version || "1.0", department: docObj.department,
+          author: docObj.author || "", issue_date: docObj.createdDate || "",
+          retention_years: docObj.retentionYears, pdf_path: docObj.pdfPath || "",
+          docx_path: docObj.docxPath || "", remarks: "",
+        }),
+      });
+    } catch (e) { console.warn("文件 API 新增失敗", e.message); }
+    setDocuments(prev => [...prev, docObj]);
     setMode(null); setNewDoc({ ...emptyDoc });
   }
 
@@ -1711,11 +1725,24 @@ function DocumentsTab({ documents, setDocuments }) {
   function removeBulkItem(idx) {
     setBulkItems(prev => prev.filter((_, i) => i !== idx));
   }
-  function confirmBulkUpload() {
+  async function confirmBulkUpload() {
     const valid = bulkItems.filter(d => d.id.trim() && d.name.trim() && d.department.trim() && d.createdDate);
     const invalid = bulkItems.length - valid.length;
     if (invalid > 0) { setErr(`尚有 ${invalid} 筆資料未填完整（需：編號、名稱、部門、日期）`); return; }
     setErr("");
+    // 同步到 ERP API
+    try {
+      await erpApiJson("/api/documents/bulk", {
+        method: "POST",
+        body: JSON.stringify(valid.map(d => ({
+          doc_no: d.id, doc_name: d.name, doc_type: d.type || "管理程序",
+          version: d.version || "1.0", department: d.department,
+          author: d.author || "", issue_date: d.createdDate || "",
+          retention_years: parseInt(d.retentionYears) || 16,
+          pdf_path: d.pdfPath || "", docx_path: d.docxPath || "", remarks: "",
+        }))),
+      });
+    } catch (e) { console.warn("批量文件 API 失敗", e.message); }
     setDocuments(prev => [...prev, ...valid.map(d => ({ ...d, retentionYears: parseInt(d.retentionYears)||16, _status: undefined }))]);
     setBulkItems([]); setBulkDone(true);
     setTimeout(() => { setMode(null); setBulkDone(false); }, 1500);
@@ -7968,6 +7995,46 @@ function App() {
       }
     }
     loadOpsData();
+    return () => { cancelled = true; };
+  }, [authUser]);
+
+  // ── 文件管理：從 ERP API 載入，首次自動種入 initialDocuments ─────
+  useEffect(() => {
+    if (!authUser) return;
+    let cancelled = false;
+    function apiDocToFrontend(d) {
+      return {
+        id: d.doc_no, name: d.doc_name, type: d.doc_type,
+        version: d.version, department: d.department, author: d.author,
+        createdDate: d.issue_date, retentionYears: d.retention_years,
+        pdfPath: d.pdf_path, docxPath: d.docx_path,
+        _apiId: d.id,
+      };
+    }
+    async function loadDocuments() {
+      try {
+        const body = await erpApiJson("/api/documents");
+        if (cancelled) return;
+        const rows = body.data || [];
+        if (rows.length > 0) {
+          setDocuments(rows.map(apiDocToFrontend));
+        } else {
+          // 首次：種入 initialDocuments
+          const payload = initialDocuments.map(d => ({
+            doc_no: d.id, doc_name: d.name, doc_type: d.type,
+            version: d.version, department: d.department, author: d.author,
+            issue_date: d.createdDate || "", retention_years: d.retentionYears || 16,
+            pdf_path: d.pdfPath || "", docx_path: d.docxPath || "", remarks: "",
+          }));
+          await erpApiJson("/api/documents/bulk", { method: "POST", body: JSON.stringify(payload) });
+          const body2 = await erpApiJson("/api/documents");
+          if (!cancelled) setDocuments((body2.data || []).map(apiDocToFrontend));
+        }
+      } catch (err) {
+        console.warn("文件 API 載入失敗，使用本地資料", err.message);
+      }
+    }
+    loadDocuments();
     return () => { cancelled = true; };
   }, [authUser]);
 
