@@ -17,27 +17,24 @@ QUESTION_FILLERS = [
     "是否",
     "哪些",
     "有無",
-    "對",
-    "與",
-    "和",
-    "及",
-    "的",
-    "嗎",
-    "呢",
     "有沒有",
     "可以",
     "需要",
     "應該",
     "整個",
     "目前",
-    "請",
     "告訴我",
     "說明",
     "介紹",
 ]
 
+# 單字停用詞只在斷詞後以 token 為單位過濾，避免 replace() 破壞複合詞
+# 例：「目的管理」若對全串做 replace("的"," ") 會變成「目 管理」
+_SINGLE_CHAR_STOP: set[str] = {"對", "與", "和", "及", "的", "嗎", "呢", "請"}
+
 
 def build_search_terms(query: str) -> list[str]:
+    # 多字停用詞可安全地對全串做替換（不會是複合詞的一部分）
     cleaned = query
     for token in QUESTION_FILLERS:
         cleaned = cleaned.replace(token, " ")
@@ -53,6 +50,9 @@ def build_search_terms(query: str) -> list[str]:
             terms.append(t)
 
     for part in cleaned.split():
+        # 單字停用詞在 token 層級過濾
+        if part in _SINGLE_CHAR_STOP:
+            continue
         _add(part)
         # For Chinese segments generate 4-char and 2-char n-grams so
         # near-synonyms (評選/評鑑) still share partial overlap
@@ -61,9 +61,10 @@ def build_search_terms(query: str) -> list[str]:
                 for i in range(len(part) - n + 1):
                     _add(part[i : i + n])
 
-    # Also try the raw query stripped of spaces as one big term
+    # 只在原始查詢不超過 20 字時加入，過長的查詢串不會命中任何段落
     raw = re.sub(r"\s+", "", query)
-    _add(raw)
+    if len(raw) <= 20:
+        _add(raw)
 
     return terms[:20]
 
