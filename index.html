@@ -1335,61 +1335,262 @@ const inputStyle = {
 
 
 // ─── CALIBRATION TAB ─────────────────────────────────────────────────────────
-function CalibrationTab({ instruments, setInstruments }) {
-  const [modal, setModal] = useState(null);
-  const [form, setForm] = useState({});
-  const enriched = instruments.map(i => {
-    const nextDate = i.status === "免校正" ? null : addDays(i.calibratedDate, i.intervalDays);
-    const days = nextDate ? daysUntil(nextDate) : 9999;
-    return { ...i, nextDate, days };
-  }).sort((a, b) => a.days - b.days);
-  function handleUpdate() {
-    setInstruments(prev => prev.map(i => i.id === modal.id ? { ...i, calibratedDate: form.date, status: "合格" } : i));
-    setModal(null);
+function CalibrationTab({ setInstruments }) {
+  const [rows, setRows]         = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [err, setErr]           = useState("");
+  const [saving, setSaving]     = useState(false);
+  // record modal
+  const [recModal, setRecModal] = useState(null);   // instrument row
+  const [recForm, setRecForm]   = useState({});
+  // instrument modal
+  const [instModal, setInstModal] = useState(false);
+  const [instForm, setInstForm]   = useState({});
+  const [instErr, setInstErr]     = useState("");
+
+  // ── helpers ───────────────────────────────────────────────────────────────
+  function toFrontend(inst) {
+    return {
+      id:             inst.instrument_code,
+      name:           inst.instrument_name,
+      type:           inst.instrument_type,
+      location:       inst.location,
+      keeper:         inst.keeper,
+      brand:          inst.brand,
+      calibMethod:    inst.calib_method,
+      intervalDays:   inst.interval_days,
+      needsMSA:       inst.needs_msa,
+      status:         inst.status,
+      calibratedDate: inst.last_calibration_date || null,
+      nextCalibration:inst.next_due_date || null,
+      _id:            inst.id,
+    };
   }
+
+  // ── load ─────────────────────────────────────────────────────────────────
+  async function loadInstruments() {
+    setLoading(true); setErr("");
+    try {
+      const body = await erpApiJson("/api/calibration/instruments");
+      const data = body.data || [];
+      setRows(data);
+      if (setInstruments) setInstruments(data.map(toFrontend));
+    } catch (e) {
+      setErr(e.message || "載入失敗");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { loadInstruments(); }, []);
+
+  // ── enriched view ─────────────────────────────────────────────────────────
+  const enriched = rows.map(inst => {
+    const nextDate = (inst.status === "exempt" || inst.status === "免校正")
+      ? null
+      : (inst.next_due_date || null);
+    const days = nextDate ? daysUntil(nextDate) : 9999;
+    return { ...inst, nextDate, days };
+  }).sort((a, b) => a.days - b.days);
+
+  // ── create calibration record ────────────────────────────────────────────
+  async function handleCreateRecord() {
+    if (!recForm.calibration_date) { alert("請選擇校正日期"); return; }
+    setSaving(true);
+    try {
+      await erpApiJson("/api/calibration/records", {
+        method: "POST",
+        body: JSON.stringify({
+          instrument_id:    recModal._id,
+          calibration_date: recForm.calibration_date,
+          result:           recForm.result || "合格",
+          calibrated_by:    recForm.calibrated_by || "",
+          certificate_no:   recForm.certificate_no || "",
+          remarks:          recForm.remarks || "",
+        }),
+      });
+      setRecModal(null);
+      await loadInstruments();
+    } catch (e) {
+      alert("儲存失敗：" + e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ── create instrument ────────────────────────────────────────────────────
+  async function handleCreateInstrument() {
+    if (!instForm.instrument_code || !instForm.instrument_name) {
+      setInstErr("儀器編號與儀器名稱為必填"); return;
+    }
+    setSaving(true); setInstErr("");
+    try {
+      await erpApiJson("/api/calibration/instruments", {
+        method: "POST",
+        body: JSON.stringify({
+          instrument_code: instForm.instrument_code,
+          instrument_name: instForm.instrument_name,
+          instrument_type: instForm.instrument_type || "",
+          model_no:        instForm.model_no || "",
+          serial_no:       instForm.serial_no || "",
+          location:        instForm.location || "",
+          keeper:          instForm.keeper || "",
+          brand:           instForm.brand || "",
+          calib_method:    instForm.calib_method || "外校",
+          interval_days:   parseInt(instForm.interval_days) || 365,
+          needs_msa:       !!instForm.needs_msa,
+          status:          instForm.status || "active",
+        }),
+      });
+      setInstModal(false);
+      setInstForm({});
+      await loadInstruments();
+    } catch (e) {
+      setInstErr("新增失敗：" + e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ── render ────────────────────────────────────────────────────────────────
   return (
     <div>
       <SectionHeader title="量規儀器校正追蹤" count={enriched.length} color="#60a5fa" />
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <StatCard label="逾期" value={enriched.filter(i => i.days < 0).length} color="#ef4444" />
-        <StatCard label="14天內到期" value={enriched.filter(i => i.days >= 0 && i.days <= 14).length} color="#f97316" />
-        <StatCard label="正常" value={enriched.filter(i => i.days > 30).length} color="#22c55e" />
-        <StatCard label="免校正" value={enriched.filter(i => i.status === "免校正").length} color="#6366f1" />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {enriched.map(inst => inst.status === "免校正" ? (
-          <div key={inst.id} style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <div style={{ fontWeight: 700, color: "#c7d2fe", fontSize: 14 }}>{inst.name}</div>
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{inst.id} · {inst.location}</div>
-            </div>
-            <Badge color="#6366f1">免校正</Badge>
+      {err && (
+        <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, color: "#fca5a5", fontSize: 13 }}>
+          ⚠ {err}　<span style={{ color: "#64748b", fontSize: 12 }}>（請確認 ERP 服務已啟動並已登入）</span>
+        </div>
+      )}
+      {loading ? (
+        <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>載入中…</div>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+            <StatCard label="逾期"      value={enriched.filter(i => i.days < 0).length}              color="#ef4444" />
+            <StatCard label="14天內到期" value={enriched.filter(i => i.days >= 0 && i.days <= 14).length} color="#f97316" />
+            <StatCard label="正常"      value={enriched.filter(i => i.days > 14 && i.days !== 9999).length} color="#22c55e" />
+            <StatCard label="免校正"    value={enriched.filter(i => i.days === 9999).length}         color="#6366f1" />
           </div>
-        ) : (
-          <div key={inst.id} style={{ background: urgencyBg(inst.days), border: `1px solid ${urgencyColor(inst.days)}33`, borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{inst.name}</div>
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{inst.id} · {inst.location} · {inst.type}{inst.needsMSA && <span style={{ marginLeft: 8, color: "#818cf8", fontWeight: 700 }}>需 MSA</span>}</div>
-            </div>
-            <div style={{ textAlign: "right", minWidth: 120 }}>
-              <div style={{ fontSize: 12, color: "#64748b" }}>下次校正</div>
-              <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{formatDate(inst.nextDate)}</div>
-            </div>
-            <Badge color={urgencyColor(inst.days)}>{urgencyLabel(inst.days)}</Badge>
-            <button onClick={() => { setModal(inst); setForm({ date: new Date().toISOString().split("T")[0] }); }} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, color: "#94a3b8", cursor: "pointer", padding: "6px 14px", fontSize: 12, fontWeight: 600 }}>更新校正</button>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+            <button
+              onClick={() => { setInstForm({ interval_days: 365, calib_method: "外校", status: "active" }); setInstErr(""); setInstModal(true); }}
+              style={{ background: "linear-gradient(135deg,#3b82f6,#6366f1)", border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", padding: "9px 18px", fontSize: 13, fontWeight: 700 }}
+            >＋ 新增儀器</button>
           </div>
-        ))}
-      </div>
-      {modal && (
-        <Modal title={`更新校正記錄：${modal.name}`} onClose={() => setModal(null)}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>儀器編號</div><div style={{ color: "#e2e8f0", fontWeight: 600 }}>{modal.id}</div></div>
-            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>本次校正日期</div><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inputStyle} /></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {enriched.map(inst => inst.days === 9999 ? (
+              <div key={inst.id} style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ fontWeight: 700, color: "#c7d2fe", fontSize: 14 }}>{inst.instrument_name}</div>
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{inst.instrument_code} · {inst.location}</div>
+                </div>
+                <Badge color="#6366f1">免校正</Badge>
+              </div>
+            ) : (
+              <div key={inst.id} style={{ background: urgencyBg(inst.days), border: `1px solid ${urgencyColor(inst.days)}33`, borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{inst.instrument_name}</div>
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                    {inst.instrument_code} · {inst.location} · {inst.instrument_type}
+                    {inst.needs_msa && <span style={{ marginLeft: 8, color: "#818cf8", fontWeight: 700 }}>需 MSA</span>}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right", minWidth: 140 }}>
+                  <div style={{ fontSize: 11, color: "#64748b" }}>上次校正　<span style={{ color: "#94a3b8" }}>{formatDate(inst.last_calibration_date) || "—"}</span></div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>下次校正</div>
+                  <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{formatDate(inst.next_due_date) || "未排定"}</div>
+                </div>
+                <Badge color={urgencyColor(inst.days)}>{urgencyLabel(inst.days)}</Badge>
+                <button
+                  onClick={() => { setRecModal(inst); setRecForm({ calibration_date: new Date().toISOString().slice(0,10), result: "合格" }); }}
+                  style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, color: "#94a3b8", cursor: "pointer", padding: "6px 14px", fontSize: 12, fontWeight: 600 }}
+                >更新校正</button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* 校正記錄 modal */}
+      {recModal && (
+        <Modal title={`新增校正記錄：${recModal.instrument_name}`} onClose={() => setRecModal(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div>
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>儀器編號</div>
+              <div style={{ color: "#e2e8f0", fontWeight: 600 }}>{recModal.instrument_code}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>本次校正日期 *</div>
+              <input type="date" value={recForm.calibration_date} onChange={e => setRecForm({ ...recForm, calibration_date: e.target.value })} style={inputStyle} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>校正結果</div>
+              <select value={recForm.result} onChange={e => setRecForm({ ...recForm, result: e.target.value })} style={inputStyle}>
+                <option>合格</option><option>條件合格</option><option>不合格</option>
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>校正人員 / 校正單位</div>
+              <input value={recForm.calibrated_by || ""} onChange={e => setRecForm({ ...recForm, calibrated_by: e.target.value })} style={inputStyle} placeholder="例：SGS / 陳品管" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>證書編號</div>
+              <input value={recForm.certificate_no || ""} onChange={e => setRecForm({ ...recForm, certificate_no: e.target.value })} style={inputStyle} placeholder="校正證書編號" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>備註</div>
+              <input value={recForm.remarks || ""} onChange={e => setRecForm({ ...recForm, remarks: e.target.value })} style={inputStyle} placeholder="可留空" />
+            </div>
             <div style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 8, padding: 12 }}>
               <div style={{ fontSize: 12, color: "#4ade80", fontWeight: 600 }}>更新後，下次校正日期將為：</div>
-              <div style={{ color: "#86efac", fontWeight: 700, fontSize: 16, marginTop: 4 }}>{formatDate(addDays(form.date || modal.calibratedDate, modal.intervalDays))}</div>
+              <div style={{ color: "#86efac", fontWeight: 700, fontSize: 16, marginTop: 4 }}>
+                {formatDate(addDays(recForm.calibration_date, recModal.interval_days)) || "—"}
+              </div>
             </div>
-            <button onClick={handleUpdate} style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", padding: "12px 24px", fontSize: 15, fontWeight: 700 }}>✓ 確認更新校正記錄</button>
+            <button onClick={handleCreateRecord} disabled={saving} style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", border: "none", borderRadius: 10, color: "#fff", cursor: saving ? "not-allowed" : "pointer", padding: "12px 24px", fontSize: 15, fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
+              {saving ? "儲存中…" : "✓ 確認儲存校正記錄"}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* 新增儀器 modal */}
+      {instModal && (
+        <Modal title="新增量測儀器" onClose={() => setInstModal(false)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {instErr && <div style={{ color: "#fca5a5", fontSize: 13 }}>⚠ {instErr}</div>}
+            {[
+              ["儀器編號 *", "instrument_code", "JE-04"],
+              ["儀器名稱 *", "instrument_name", "例：三次元量測儀"],
+              ["儀器類型",   "instrument_type", "例：量具"],
+              ["型號",       "model_no",        ""],
+              ["序號",       "serial_no",       ""],
+              ["存放位置",   "location",        "品管室"],
+              ["保管人",     "keeper",          ""],
+              ["品牌",       "brand",           ""],
+            ].map(([label, key, ph]) => (
+              <div key={key}>
+                <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>{label}</div>
+                <input value={instForm[key] || ""} onChange={e => setInstForm({ ...instForm, [key]: e.target.value })} style={inputStyle} placeholder={ph} />
+              </div>
+            ))}
+            <div>
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>校正方式</div>
+              <select value={instForm.calib_method || "外校"} onChange={e => setInstForm({ ...instForm, calib_method: e.target.value })} style={inputStyle}>
+                <option>外校</option><option>遊校</option><option>自校</option>
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>校正週期（天）</div>
+              <input type="number" value={instForm.interval_days || 365} onChange={e => setInstForm({ ...instForm, interval_days: e.target.value })} style={inputStyle} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <input type="checkbox" id="needs_msa" checked={!!instForm.needs_msa} onChange={e => setInstForm({ ...instForm, needs_msa: e.target.checked })} />
+              <label htmlFor="needs_msa" style={{ fontSize: 13, color: "#94a3b8" }}>需要 MSA 分析</label>
+            </div>
+            <button onClick={handleCreateInstrument} disabled={saving} style={{ background: "linear-gradient(135deg,#3b82f6,#6366f1)", border: "none", borderRadius: 10, color: "#fff", cursor: saving ? "not-allowed" : "pointer", padding: "12px 24px", fontSize: 15, fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
+              {saving ? "儲存中…" : "＋ 建立儀器"}
+            </button>
           </div>
         </Modal>
       )}
@@ -5591,22 +5792,20 @@ function SpcTab({ prodRecords }) {
 
   async function handleAnalyze() {
     if (!csvFile && !batchId) { setMsg("請選擇 CSV 檔案"); return; }
+    if (!csvFile) { setMsg("請選擇 CSV 檔案（僅填批號無法進行分析）"); return; }
     setBusy(true); setMsg(""); setResult(null);
     try {
-      let res;
-      if (csvFile) {
-        const fd = new FormData();
-        fd.append("csv_file", csvFile);
-        fd.append("batch_id", batchId || csvFile.name.replace(/\.csv$/i, ""));
-        fd.append("spec", JSON.stringify({
-          thickness_usl: parseFloat(specForm.thickness_usl),
-          thickness_lsl: parseFloat(specForm.thickness_lsl),
-          ttv_usl: parseFloat(specForm.ttv_usl),
-          ttv_lsl: parseFloat(specForm.ttv_lsl),
-        }));
-        const resp = await fetch("/api/spc/analyze", { method:"POST", body: fd });
-        res = await resp.json();
-      }
+      const fd = new FormData();
+      fd.append("csv_file", csvFile);
+      fd.append("batch_id", batchId || csvFile.name.replace(/\.csv$/i, ""));
+      fd.append("spec", JSON.stringify({
+        thickness_usl: parseFloat(specForm.thickness_usl),
+        thickness_lsl: parseFloat(specForm.thickness_lsl),
+        ttv_usl: parseFloat(specForm.ttv_usl),
+        ttv_lsl: parseFloat(specForm.ttv_lsl),
+      }));
+      const resp = await fetch("/api/spc/analyze", { method:"POST", body: fd });
+      const res = await resp.json();
       if (!res.success) throw new Error(res.error || "分析失敗");
       setResult(res);
       setActiveResult(res.result);
@@ -7409,8 +7608,17 @@ function ErpMasterTab({ setActiveTab, setNcPrefill }) {
 // ─── DASHBOARD HOME ───────────────────────────────────────────────────────────
 function DashboardHome({ instruments, documents, training, equipment, suppliers, nonConformances, auditPlans, envRecords, setActiveTab }) {
   const now = new Date(); now.setHours(0,0,0,0);
-  const overdueInst = instruments.filter(i => daysUntil(i.nextCalibration) < 0).length;
-  const upcomingInst = instruments.filter(i => { const d=daysUntil(i.nextCalibration); return d>=0&&d<=30; }).length;
+  // 由 calibratedDate + intervalDays 計算下次校正日
+  function instNextCalDate(inst) {
+    if (inst.nextCalibration) return inst.nextCalibration; // 若已有直接用
+    if (!inst.calibratedDate || !inst.intervalDays) return null;
+    const d = _parseLocalDate(inst.calibratedDate);
+    if (!d) return null;
+    d.setDate(d.getDate() + inst.intervalDays);
+    return d.toISOString().slice(0, 10);
+  }
+  const overdueInst = instruments.filter(i => daysUntil(instNextCalDate(i)) < 0).length;
+  const upcomingInst = instruments.filter(i => { const d=daysUntil(instNextCalDate(i)); return d>=0&&d<=30; }).length;
   const overdueDoc = documents.filter(d => daysUntil(d.nextReview) < 0).length;
   const expiredTrain = training.filter(t => daysUntil(t.validUntil) < 0).length;
   const overdueEquip = equipment.filter(e => daysUntil(e.nextMaintenance) < 0).length;
@@ -7420,23 +7628,23 @@ function DashboardHome({ instruments, documents, training, equipment, suppliers,
   const envPassRate = envRecords.length > 0 ? Math.round(envRecords.filter(r => r.result === "合格").length / envRecords.length * 100) : 0;
   const poorSupplier = suppliers.filter(s => s.score < 70).length;
   const alerts = [];
-  if (overdueInst > 0) alerts.push({ type: "error", msg: `有 ${overdueInst} 个小器校正遇期，請立即安排試驗` });
-  if (upcomingInst > 0) alerts.push({ type: "warn", msg: `有 ${upcomingInst} 个小器將於 30 天內到期校正` });
-  if (overdueDoc > 0) alerts.push({ type: "error", msg: `有 ${overdueDoc} 份文件顆開複審遇期` });
-  if (expiredTrain > 0) alerts.push({ type: "error", msg: `有 ${expiredTrain} 檔員訓練認證已過期` });
-  if (overdueEquip > 0) alerts.push({ type: "error", msg: `有 ${overdueEquip} 台設備保養遇期` });
-  if (overdueNc > 0) alerts.push({ type: "error", msg: `有 ${overdueNc} 个不符合項目已逾期未關閉` });
+  if (overdueInst > 0) alerts.push({ type: "error", msg: `有 ${overdueInst} 個量測儀器校正逾期，請立即安排送校` });
+  if (upcomingInst > 0) alerts.push({ type: "warn", msg: `有 ${upcomingInst} 個量測儀器將於 30 天內到期校正` });
+  if (overdueDoc > 0) alerts.push({ type: "error", msg: `有 ${overdueDoc} 份文件已逾複審期限` });
+  if (expiredTrain > 0) alerts.push({ type: "error", msg: `有 ${expiredTrain} 名人員訓練認證已過期` });
+  if (overdueEquip > 0) alerts.push({ type: "error", msg: `有 ${overdueEquip} 台設備保養逾期` });
+  if (overdueNc > 0) alerts.push({ type: "error", msg: `有 ${overdueNc} 個不符合項目已逾期未關閉` });
   if (upcomingAudit > 0) alerts.push({ type: "warn", msg: `${upcomingAudit} 場內部稽核將於 30 天內執行` });
   if (poorSupplier > 0) alerts.push({ type: "warn", msg: `有 ${poorSupplier} 家供應商評分不足 70 分` });
   if (envPassRate < 90) alerts.push({ type: "warn", msg: `潔淨室環境合格率僅 ${envPassRate}%` });
   const kpis = [
-    { label: "校正小器", value: instruments.length, sub: overdueInst > 0 ? `${overdueInst}个遇期` : "全部正常", color: overdueInst > 0 ? "#ef4444" : "#60a5fa", tab: "calibration" },
-    { label: "程序文件", value: documents.length, sub: overdueDoc > 0 ? `${overdueDoc}份鸞期` : "全部有效", color: overdueDoc > 0 ? "#ef4444" : "#22c55e", tab: "documents" },
+    { label: "校正儀器", value: instruments.length, sub: overdueInst > 0 ? `${overdueInst}個逾期` : "全部正常", color: overdueInst > 0 ? "#ef4444" : "#60a5fa", tab: "calibration" },
+    { label: "程序文件", value: documents.length, sub: overdueDoc > 0 ? `${overdueDoc}份逾期` : "全部有效", color: overdueDoc > 0 ? "#ef4444" : "#22c55e", tab: "documents" },
     { label: "訓練記錄", value: training.length, sub: expiredTrain > 0 ? `${expiredTrain}人過期` : "全部有效", color: expiredTrain > 0 ? "#ef4444" : "#22c55e", tab: "training" },
-    { label: "設備保養", value: equipment.length, sub: overdueEquip > 0 ? `${overdueEquip}台鸞期` : "全部正常", color: overdueEquip > 0 ? "#ef4444" : "#22c55e", tab: "equipment" },
+    { label: "設備保養", value: equipment.length, sub: overdueEquip > 0 ? `${overdueEquip}台逾期` : "全部正常", color: overdueEquip > 0 ? "#ef4444" : "#22c55e", tab: "equipment" },
     { label: "供應商", value: suppliers.length, sub: poorSupplier > 0 ? `${poorSupplier}家評分不足` : "全部合格", color: poorSupplier > 0 ? "#eab308" : "#22c55e", tab: "supplier" },
     { label: "不符合項", value: nonConformances.length, sub: openNc > 0 ? `${openNc}個未關閉` : "全部已關閉", color: openNc > 0 ? "#ef4444" : "#22c55e", tab: "nonconformance" },
-    { label: "稽核計畫", value: auditPlans.length, sub: upcomingAudit > 0 ? `${upcomingAudit}地30天內執行` : "如期進行", color: upcomingAudit > 0 ? "#f97316" : "#8b5cf6", tab: "auditplan" },
+    { label: "稽核計畫", value: auditPlans.length, sub: upcomingAudit > 0 ? `${upcomingAudit}場30天內執行` : "如期進行", color: upcomingAudit > 0 ? "#f97316" : "#8b5cf6", tab: "auditplan" },
     { label: "環境監測", value: envRecords.length, sub: `合格率 ${envPassRate}%`, color: envPassRate >= 90 ? "#14b8a6" : envPassRate >= 80 ? "#eab308" : "#ef4444", tab: "environment" },
   ];
   return (
@@ -7470,16 +7678,19 @@ function DashboardHome({ instruments, documents, training, equipment, suppliers,
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", marginBottom: 14 }}>最近校正到期小器</div>
-          {[...instruments].sort((a,b) => daysUntil(a.nextCalibration)-daysUntil(b.nextCalibration)).slice(0,5).map(inst => (
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", marginBottom: 14 }}>最近校正到期儀器</div>
+          {[...instruments].sort((a,b) => daysUntil(instNextCalDate(a))-daysUntil(instNextCalDate(b))).slice(0,5).map(inst => {
+            const nextCal = instNextCalDate(inst);
+            return (
             <div key={inst.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
               <div>
                 <div style={{ fontSize:13, color:"#e2e8f0" }}>{inst.name}</div>
                 <div style={{ fontSize:11, color:"#64748b" }}>{inst.id}</div>
               </div>
-              <Badge color={urgencyColor(daysUntil(inst.nextCalibration))}>{urgencyLabel(daysUntil(inst.nextCalibration))}</Badge>
+              <Badge color={urgencyColor(daysUntil(nextCal))}>{urgencyLabel(daysUntil(nextCal))}</Badge>
             </div>
-          ))}
+          );
+          })}
         </div>
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 20 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", marginBottom: 14 }}>未關閉不符合項目</div>
@@ -7728,6 +7939,16 @@ function App() {
   useEffect(() => saveStoredState("audit_qualityrecords", qualityRecords), [qualityRecords]);
   useEffect(() => saveStoredState("audit_equipment", equipment), [equipment]);
 
+  // ── ERP 登出事件監聽：Token 過期時自動清除並提示 ─────────
+  useEffect(() => {
+    function handleErpExpired() {
+      clearErpSession();
+      alert("ERP 登入已過期，請重新登入 ERP 主資料。");
+    }
+    window.addEventListener("erp-session-expired", handleErpExpired);
+    return () => window.removeEventListener("erp-session-expired", handleErpExpired);
+  }, []);
+
   useEffect(() => {
     if (!authUser) return;
     let cancelled = false;
@@ -7786,24 +8007,24 @@ function App() {
 
   function renderTab() {
     switch(activeTab) {
-      case "home":           return <DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setTabSafe} />;
-      case "kpi":            return <KpiDashboard instruments={instruments} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} prodRecords={prodRecords} qualityRecords={qualityRecords} />;
-      case "spc":            return <SpcTab prodRecords={prodRecords} />;
-      case "calibration":    return <CalibrationTab instruments={instruments} setInstruments={setInstruments} />;
-      case "documents":      return <DocumentsManagerTab documents={documents} setDocuments={setDocuments} manuals={manuals} />;
-      case "library":        return <LibraryHierarchyTab documents={documents} manuals={manuals} />;
-      case "training":       return <TrainingTab training={training} setTraining={setTraining} />;
-      case "equipment":      return <EquipmentTab equipment={equipment} setEquipment={setEquipment} />;
-      case "supplier":       return <SupplierTab suppliers={suppliers} setSuppliers={setSuppliers} />;
-      case "nonconformance": return <NonConformanceTab nonConformances={nonConformances} setNonConformances={setNonConformances} highlightNcId={highlightNcId} onHighlightDone={() => setHighlightNcId(null)} expandNcId={expandNcId} onExpandDone={() => setExpandNcId(null)} ncPrefill={ncPrefill} setNcPrefill={setNcPrefill} />;
-      case "auditplan":      return <AuditPlanTab auditPlans={auditPlans} setAuditPlans={setAuditPlans} />;
-      case "environment":    return <EnvironmentTab envRecords={envRecords} setEnvRecords={setEnvRecords} />;
+      case "home":           return <PageErrorBoundary pageName="主控台"><DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setTabSafe} /></PageErrorBoundary>;
+      case "kpi":            return <PageErrorBoundary pageName="績效儀表板"><KpiDashboard instruments={instruments} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} prodRecords={prodRecords} qualityRecords={qualityRecords} /></PageErrorBoundary>;
+      case "spc":            return <PageErrorBoundary pageName="SPC 管制圖"><SpcTab prodRecords={prodRecords} /></PageErrorBoundary>;
+      case "calibration":    return <PageErrorBoundary pageName="校正管理"><CalibrationTab setInstruments={setInstruments} /></PageErrorBoundary>;
+      case "documents":      return <PageErrorBoundary pageName="文件管理"><DocumentsManagerTab documents={documents} setDocuments={setDocuments} manuals={manuals} /></PageErrorBoundary>;
+      case "library":        return <PageErrorBoundary pageName="文件庫"><LibraryHierarchyTab documents={documents} manuals={manuals} /></PageErrorBoundary>;
+      case "training":       return <PageErrorBoundary pageName="訓練管理"><TrainingTab training={training} setTraining={setTraining} /></PageErrorBoundary>;
+      case "equipment":      return <PageErrorBoundary pageName="設備保養" storageKeys={["audit_equipment"]}><EquipmentTab equipment={equipment} setEquipment={setEquipment} /></PageErrorBoundary>;
+      case "supplier":       return <PageErrorBoundary pageName="供應商管理"><SupplierTab suppliers={suppliers} setSuppliers={setSuppliers} /></PageErrorBoundary>;
+      case "nonconformance": return <PageErrorBoundary pageName="不符合管理"><NonConformanceTab nonConformances={nonConformances} setNonConformances={setNonConformances} highlightNcId={highlightNcId} onHighlightDone={() => setHighlightNcId(null)} expandNcId={expandNcId} onExpandDone={() => setExpandNcId(null)} ncPrefill={ncPrefill} setNcPrefill={setNcPrefill} /></PageErrorBoundary>;
+      case "auditplan":      return <PageErrorBoundary pageName="稽核計畫"><AuditPlanTab auditPlans={auditPlans} setAuditPlans={setAuditPlans} /></PageErrorBoundary>;
+      case "environment":    return <PageErrorBoundary pageName="環境監測"><EnvironmentTab envRecords={envRecords} setEnvRecords={setEnvRecords} /></PageErrorBoundary>;
       case "production":     return <PageErrorBoundary pageName="記錄匯出" storageKeys={["audit_prodrecords", "audit_qualityrecords"]}><ProductionTab envRecords={envRecords} prodRecords={prodRecords} setProdRecords={setProdRecords} qualityRecords={qualityRecords} setQualityRecords={setQualityRecords} nonConformances={nonConformances} auditPlans={auditPlans} setActiveTab={setTabSafe} setHighlightNcId={setHighlightNcId} setExpandNcId={setExpandNcId} /></PageErrorBoundary>;
-      case "notification":   return <NotificationTab instruments={instruments} documents={documents} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} />;
-      case "aiworkbench":    return <AIWorkbenchTab documents={documents} manuals={manuals} nonConformances={nonConformances} />;
-      case "report":         return <ReportTab instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} />;
-      case "erpmaster":      return <ErpMasterTab setActiveTab={setTabSafe} setNcPrefill={setNcPrefill} />;
-      default:               return <DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setTabSafe} />;
+      case "notification":   return <PageErrorBoundary pageName="通知提醒"><NotificationTab instruments={instruments} documents={documents} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} /></PageErrorBoundary>;
+      case "aiworkbench":    return <PageErrorBoundary pageName="AI 工作台"><AIWorkbenchTab documents={documents} manuals={manuals} nonConformances={nonConformances} /></PageErrorBoundary>;
+      case "report":         return <PageErrorBoundary pageName="稽核報告"><ReportTab instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} /></PageErrorBoundary>;
+      case "erpmaster":      return <PageErrorBoundary pageName="ERP 主資料"><ErpMasterTab setActiveTab={setTabSafe} setNcPrefill={setNcPrefill} /></PageErrorBoundary>;
+      default:               return <PageErrorBoundary pageName="主控台"><DashboardHome instruments={instruments} documents={documents} training={training} equipment={equipment} suppliers={suppliers} nonConformances={nonConformances} auditPlans={auditPlans} envRecords={envRecords} setActiveTab={setTabSafe} /></PageErrorBoundary>;
     }
   }
 

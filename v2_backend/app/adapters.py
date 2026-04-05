@@ -14,8 +14,17 @@ from .config import settings
 def resolve_project_path(path_str: str) -> Path:
     path = Path(path_str)
     if path.is_absolute():
-        return path
-    return (settings.project_root / path_str).resolve()
+        resolved = path.resolve()
+    else:
+        resolved = (settings.project_root / path_str).resolve()
+    # 安全檢查：確保路徑在 project_root 之內，防止路徑穿越
+    try:
+        resolved.relative_to(settings.project_root.resolve())
+    except ValueError:
+        raise ValueError(
+            f"路徑 '{path_str}' 超出專案目錄範圍，禁止存取"
+        )
+    return resolved
 
 
 def parse_document(path_str: str) -> dict:

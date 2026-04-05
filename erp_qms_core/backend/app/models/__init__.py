@@ -15,6 +15,7 @@ from .master import (
 from .orders import SalesOrder, SalesOrderItem, WorkOrder
 from .inventory import InventoryLocation, InventoryTransaction, Shipment
 from .audit import ApprovalWorkflow, AuditLog, NotificationLog
+from .calibration import CalibrationInstrument, CalibrationRecord
 
 __all__ = [
     "Base",
@@ -39,4 +40,6 @@ __all__ = [
     "ApprovalWorkflow",
     "AuditLog",
     "NotificationLog",
+    "CalibrationInstrument",
+    "CalibrationRecord",
 ]
