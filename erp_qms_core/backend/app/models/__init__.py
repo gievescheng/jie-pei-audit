@@ -17,6 +17,7 @@ from .inventory import InventoryLocation, InventoryTransaction, Shipment
 from .audit import ApprovalWorkflow, AuditLog, NotificationLog
 from .calibration import CalibrationInstrument, CalibrationRecord
 from .documents import QmsDocument
+from .training import TrainingEmployee, TrainingRecord
 
 __all__ = [
     "Base",
@@ -44,4 +45,6 @@ __all__ = [
     "CalibrationInstrument",
     "CalibrationRecord",
     "QmsDocument",
+    "TrainingEmployee",
+    "TrainingRecord",
 ]
