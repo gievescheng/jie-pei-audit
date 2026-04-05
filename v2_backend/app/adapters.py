@@ -258,11 +258,11 @@ def resolve_supplier(
 def maybe_call_openrouter(*, system_prompt: str, policy_prompt: str, user_prompt: str) -> str | None:
     if not settings.openrouter_api_key:
         return None
+    combined_system = (system_prompt + "\n" + policy_prompt).strip()
     payload = {
         "model": settings.openrouter_model,
         "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "system", "content": policy_prompt},
+            {"role": "system", "content": combined_system},
             {"role": "user", "content": user_prompt},
         ],
         "temperature": 0.2,
