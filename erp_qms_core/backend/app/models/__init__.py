@@ -18,6 +18,8 @@ from .audit import ApprovalWorkflow, AuditLog, NotificationLog
 from .calibration import CalibrationInstrument, CalibrationRecord
 from .documents import QmsDocument
 from .training import TrainingEmployee, TrainingRecord
+from .equipment import EquipmentMaster, MaintenanceRecord
+from .supplier_eval import SupplierEvaluation
 
 __all__ = [
     "Base",
@@ -47,4 +49,7 @@ __all__ = [
     "QmsDocument",
     "TrainingEmployee",
     "TrainingRecord",
+    "EquipmentMaster",
+    "MaintenanceRecord",
+    "SupplierEvaluation",
 ]
