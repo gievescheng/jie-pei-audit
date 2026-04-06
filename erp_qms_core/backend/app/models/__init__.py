@@ -17,6 +17,12 @@ from .inventory import InventoryLocation, InventoryTransaction, Shipment
 from .audit import ApprovalWorkflow, AuditLog, NotificationLog
 from .calibration import CalibrationInstrument, CalibrationRecord
 from .documents import QmsDocument
+from .training import TrainingEmployee, TrainingRecord
+from .equipment import EquipmentMaster, MaintenanceRecord
+from .supplier_eval import SupplierEvaluation
+from .env_particle import EnvParticleRecord
+from .nonconformance import NonConformance
+from .audit_plan import AuditPlan
 
 __all__ = [
     "Base",
@@ -44,4 +50,12 @@ __all__ = [
     "CalibrationInstrument",
     "CalibrationRecord",
     "QmsDocument",
+    "TrainingEmployee",
+    "TrainingRecord",
+    "EquipmentMaster",
+    "MaintenanceRecord",
+    "SupplierEvaluation",
+    "EnvParticleRecord",
+    "NonConformance",
+    "AuditPlan",
 ]

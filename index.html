@@ -1970,155 +1970,514 @@ function DocumentsTab({ documents, setDocuments }) {
 
 
 // ─── TRAINING TAB ─────────────────────────────────────────────────────────────
-function TrainingTab({ training, setTraining }) {
+function TrainingTab({ setTraining }) {
+  const [rows, setRows]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr]         = useState("");
+  const [saving, setSaving]   = useState(false);
   const [selected, setSelected] = useState(null);
-  const [showAdd, setShowAdd] = useState(false);
-  const [newRecord, setNewRecord] = useState({ course: "", date: "", type: "內訓", result: "合格", cert: "無" });
-  function addTraining() {
-    setTraining(prev => prev.map(emp => emp.id === selected.id ? { ...emp, trainings: [...emp.trainings, { ...newRecord }] } : emp));
-    setSelected(prev => ({ ...prev, trainings: [...prev.trainings, { ...newRecord }] }));
-    setShowAdd(false);
-    setNewRecord({ course: "", date: "", type: "內訓", result: "合格", cert: "無" });
+  const [showAdd, setShowAdd]   = useState(false);
+  const [newRecord, setNewRecord] = useState({ course_name: "", training_date: "", training_type: "內訓", result: "合格", certificate_no: "無", validity_months: 0 });
+
+  function toFrontend(emp) {
+    return {
+      id: emp.emp_no, name: emp.emp_name, dept: emp.department, role: emp.role,
+      hireDate: emp.hire_date, status: emp.status, _id: emp.id,
+      trainings: (emp.records || []).map(r => ({
+        id: r.id, course: r.course_name, date: r.training_date,
+        type: r.training_type, result: r.result,
+        cert: r.certificate_no === "無" ? "無" : "有",
+        expired: r.expired,
+      })),
+    };
   }
+
+  async function load() {
+    setLoading(true); setErr("");
+    try {
+      const body = await erpApiJson("/api/training/employees");
+      const data = body.data || [];
+      setRows(data);
+      if (setTraining) setTraining(data.map(toFrontend));
+      if (data.length === 0) {
+        // 首次種入 initialTraining
+        const payload = initialTraining.map(e => ({
+          emp_no: e.id, emp_name: e.name, department: e.dept || "",
+          role: e.role || "", hire_date: e.hireDate || "", status: "active",
+        }));
+        await erpApiJson("/api/training/employees/bulk-seed", { method: "POST", body: JSON.stringify(payload) });
+        // 種入訓練紀錄
+        const body2 = await erpApiJson("/api/training/employees");
+        const employees = body2.data || [];
+        setRows(employees);
+        if (setTraining) setTraining(employees.map(toFrontend));
+        // Seed records using emp_no → id mapping
+        const empMap = {};
+        employees.forEach(e => { empMap[e.emp_no] = e.id; });
+        for (const emp of initialTraining) {
+          const empId = empMap[emp.id];
+          if (!empId) continue;
+          for (const t of emp.trainings) {
+            await erpApiJson("/api/training/records", { method: "POST", body: JSON.stringify({
+              employee_id: empId, course_name: t.course, training_date: t.date || "",
+              training_type: t.type || "內訓", result: t.result || "合格",
+              certificate_no: t.cert || "無", validity_months: 0,
+            })}).catch(() => null);
+          }
+        }
+        const body3 = await erpApiJson("/api/training/employees");
+        setRows(body3.data || []);
+        if (setTraining) setTraining((body3.data || []).map(toFrontend));
+      }
+    } catch (e) {
+      setErr(e.message || "載入失敗");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function addTraining() {
+    if (!newRecord.course_name.trim()) { alert("請填寫課程名稱"); return; }
+    setSaving(true);
+    try {
+      await erpApiJson("/api/training/records", {
+        method: "POST",
+        body: JSON.stringify({ employee_id: selected._id, ...newRecord }),
+      });
+      setShowAdd(false);
+      setNewRecord({ course_name: "", training_date: "", training_type: "內訓", result: "合格", certificate_no: "無", validity_months: 0 });
+      await load();
+      // Re-select the updated employee
+      const body = await erpApiJson("/api/training/employees");
+      const updated = (body.data || []).find(e => e.id === selected._id);
+      if (updated) setSelected(updated);
+    } catch (e) {
+      alert("儲存失敗：" + e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const totalRecords = rows.reduce((s, e) => s + (e.records || []).length, 0);
+  const totalExpired = rows.reduce((s, e) => s + (e.expired_count || 0), 0);
+  const totalExternal = rows.reduce((s, e) => s + (e.records || []).filter(r => r.training_type === "外訓").length, 0);
+
   return (
     <div>
-      <SectionHeader title="人員訓練記錄" count={training.length} color="#34d399" />
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <StatCard label="員工人數" value={training.length} color="#34d399" />
-        <StatCard label="訓練總筆數" value={training.reduce((s,e) => s+e.trainings.length,0)} color="#60a5fa" />
-        <StatCard label="外訓筆數" value={training.reduce((s,e) => s+e.trainings.filter(t=>t.type==="外訓").length,0)} color="#a78bfa" />
-        <StatCard label="有證書筆數" value={training.reduce((s,e) => s+e.trainings.filter(t=>t.cert==="有").length,0)} color="#f472b6" />
-      </div>
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-        <div style={{ flex: "0 0 260px", display: "flex", flexDirection: "column", gap: 8 }}>
-          {training.map(emp => {
-            const hireMonths = Math.floor((today - new Date(emp.hireDate)) / (30*86400000));
-            const isNew = hireMonths < 3;
-            return (<div key={emp.id} onClick={() => setSelected(emp)} style={{ background: selected?.id===emp.id?"rgba(52,211,153,0.15)":"rgba(255,255,255,0.04)", border: `1px solid ${selected?.id===emp.id?"rgba(52,211,153,0.4)":"rgba(255,255,255,0.08)"}`, borderRadius: 12, padding: "14px 16px", cursor: "pointer" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{emp.name}</div><div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{emp.dept} · {emp.role}</div></div><div style={{ textAlign: "right" }}>{isNew&&<Badge color="#f97316">新進</Badge>}<div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{emp.trainings.length} 筆訓練</div></div></div></div>);
-          })}
-        </div>
-        <div style={{ flex: 1, minWidth: 280 }}>
-          {selected ? (
-            <div>
-              <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: 16, border: "1px solid rgba(255,255,255,0.08)", marginBottom: 14 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0" }}>{selected.name}</div>
-                    <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>{selected.id} · {selected.dept} · {selected.role}</div>
-                    <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>到職日：{formatDate(selected.hireDate)}</div>
+      <SectionHeader title="人員訓練記錄（ISO 7.2）" count={rows.length} color="#34d399" />
+      {err && <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, color: "#fca5a5", fontSize: 13 }}>⚠ {err}（請確認 ERP 服務已啟動並已登入）</div>}
+      {loading ? <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>載入中…</div> : (
+        <>
+          <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+            <StatCard label="員工人數" value={rows.length} color="#34d399" />
+            <StatCard label="訓練總筆數" value={totalRecords} color="#60a5fa" />
+            <StatCard label="外訓筆數" value={totalExternal} color="#a78bfa" />
+            <StatCard label="已過期認證" value={totalExpired} color="#ef4444" />
+          </div>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+            <div style={{ flex: "0 0 260px", display: "flex", flexDirection: "column", gap: 8 }}>
+              {rows.map(emp => {
+                const hireMonths = emp.hire_date ? Math.floor((today - new Date(emp.hire_date)) / (30*86400000)) : 999;
+                const isNew = hireMonths < 3;
+                const isSelected = selected?._id === emp.id || selected?.id === emp.id;
+                return (
+                  <div key={emp.id} onClick={() => setSelected(emp)} style={{ background: isSelected ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.04)", border: `1px solid ${isSelected ? "rgba(52,211,153,0.4)" : "rgba(255,255,255,0.08)"}`, borderRadius: 12, padding: "14px 16px", cursor: "pointer" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{emp.emp_name}</div>
+                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{emp.department} · {emp.role}</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        {isNew && <Badge color="#f97316">新進</Badge>}
+                        {emp.expired_count > 0 && <Badge color="#ef4444">{emp.expired_count} 逾期</Badge>}
+                        <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{emp.record_count} 筆訓練</div>
+                      </div>
+                    </div>
                   </div>
-                  <button onClick={() => setShowAdd(true)} style={{ background: "linear-gradient(135deg, #059669, #10b981)", border: "none", borderRadius: 8, color: "#fff", cursor: "pointer", padding: "7px 14px", fontSize: 12, fontWeight: 700 }}>＋ 新增訓練</button>
-                </div>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {selected.trainings.map((t,i) => (<div key={i} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, padding: "12px 16px", display: "flex", gap: 16, alignItems: "center" }}><div style={{ flex: 1 }}><div style={{ fontWeight: 600, color: "#e2e8f0", fontSize: 13 }}>{t.course}</div><div style={{ fontSize: 11, color: "#64748b", marginTop: 3 }}>{formatDate(t.date)} · {t.type}</div></div><Badge color={t.result==="合格"?"#22c55e":"#ef4444"}>{t.result}</Badge>{t.cert==="有"&&<Badge color="#a78bfa">有證書</Badge>}</div>))}
-              </div>
+                );
+              })}
             </div>
-          ) : (<div style={{ textAlign: "center", padding: "60px 20px", color: "#475569" }}>← 點選左側員工以查看訓練記錄</div>)}
-        </div>
-      </div>
-      {showAdd && selected && (<Modal title={`新增訓練記錄：${selected.name}`} onClose={() => setShowAdd(false)}><div style={{ display: "flex", flexDirection: "column", gap: 12 }}><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>課程名稱</div><input value={newRecord.course} onChange={e => setNewRecord({...newRecord,course:e.target.value})} style={inputStyle} /></div><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>訓練日期</div><input type="date" value={newRecord.date} onChange={e => setNewRecord({...newRecord,date:e.target.value})} style={inputStyle} /></div><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>訓練類型</div><select value={newRecord.type} onChange={e => setNewRecord({...newRecord,type:e.target.value})} style={inputStyle}><option>內訓</option><option>外訓</option></select></div><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>評估結果</div><select value={newRecord.result} onChange={e => setNewRecord({...newRecord,result:e.target.value})} style={inputStyle}><option>合格</option><option>不合格</option><option>待評估</option></select></div><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>是否有結業證書</div><select value={newRecord.cert} onChange={e => setNewRecord({...newRecord,cert:e.target.value})} style={inputStyle}><option>無</option><option>有</option></select></div><button onClick={addTraining} style={{ background: "linear-gradient(135deg, #059669, #10b981)", border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", padding: "12px 24px", fontSize: 15, fontWeight: 700, marginTop: 8 }}>✓ 儲存訓練記錄</button></div></Modal>)}
+            <div style={{ flex: 1, minWidth: 280 }}>
+              {selected ? (
+                <div>
+                  <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: 16, border: "1px solid rgba(255,255,255,0.08)", marginBottom: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: "#e2e8f0" }}>{selected.emp_name}</div>
+                        <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>{selected.emp_no} · {selected.department} · {selected.role}</div>
+                        <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>到職日：{formatDate(selected.hire_date)}</div>
+                      </div>
+                      <button onClick={() => setShowAdd(true)} style={{ background: "linear-gradient(135deg, #059669, #10b981)", border: "none", borderRadius: 8, color: "#fff", cursor: "pointer", padding: "7px 14px", fontSize: 12, fontWeight: 700 }}>＋ 新增訓練</button>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {(selected.records || []).map(r => (
+                      <div key={r.id} style={{ background: r.expired ? "rgba(239,68,68,0.06)" : "rgba(255,255,255,0.03)", border: `1px solid ${r.expired ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.07)"}`, borderRadius: 10, padding: "12px 16px", display: "flex", gap: 16, alignItems: "center" }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, color: "#e2e8f0", fontSize: 13 }}>{r.course_name}</div>
+                          <div style={{ fontSize: 11, color: "#64748b", marginTop: 3 }}>{formatDate(r.training_date) || "日期未填"} · {r.training_type}{r.expiry_date && <span style={{ marginLeft: 8 }}>效期至 {formatDate(r.expiry_date)}</span>}</div>
+                        </div>
+                        <Badge color={r.result === "合格" ? "#22c55e" : "#ef4444"}>{r.result}</Badge>
+                        {r.certificate_no !== "無" && r.certificate_no && <Badge color="#a78bfa">有證書</Badge>}
+                        {r.expired && <Badge color="#ef4444">已過期</Badge>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : <div style={{ textAlign: "center", padding: "60px 20px", color: "#475569" }}>← 點選左側員工以查看訓練記錄</div>}
+            </div>
+          </div>
+        </>
+      )}
+      {showAdd && selected && (
+        <Modal title={`新增訓練記錄：${selected.emp_name}`} onClose={() => setShowAdd(false)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>課程名稱 *</div><input value={newRecord.course_name} onChange={e => setNewRecord({...newRecord, course_name: e.target.value})} style={inputStyle} placeholder="課程名稱" /></div>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>訓練日期</div><input type="date" value={newRecord.training_date} onChange={e => setNewRecord({...newRecord, training_date: e.target.value})} style={inputStyle} /></div>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>訓練類型</div><select value={newRecord.training_type} onChange={e => setNewRecord({...newRecord, training_type: e.target.value})} style={inputStyle}><option>內訓</option><option>外訓</option></select></div>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>評估結果</div><select value={newRecord.result} onChange={e => setNewRecord({...newRecord, result: e.target.value})} style={inputStyle}><option>合格</option><option>不合格</option><option>待評估</option></select></div>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>證書編號（無則填「無」）</div><input value={newRecord.certificate_no} onChange={e => setNewRecord({...newRecord, certificate_no: e.target.value})} style={inputStyle} placeholder="無" /></div>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 5 }}>效期（月，0 = 永久）</div><input type="number" value={newRecord.validity_months} onChange={e => setNewRecord({...newRecord, validity_months: parseInt(e.target.value)||0})} style={inputStyle} /></div>
+            <button onClick={addTraining} disabled={saving} style={{ background: "linear-gradient(135deg, #059669, #10b981)", border: "none", borderRadius: 10, color: "#fff", cursor: saving ? "not-allowed" : "pointer", padding: "12px 24px", fontSize: 15, fontWeight: 700, marginTop: 8, opacity: saving ? 0.7 : 1 }}>
+              {saving ? "儲存中…" : "✓ 儲存訓練記錄"}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
 
 // ─── EQUIPMENT TAB ────────────────────────────────────────────────────────────
-function EquipmentTab({ equipment, setEquipment }) {
-  const [modal, setModal] = useState(null);
-  const [form, setForm] = useState({});
-  const enriched = equipment.map(eq => {
-    const nextDate = addDays(eq.lastMaintenance, eq.intervalDays);
-    const days = daysUntil(nextDate);
-    return { ...eq, nextDate, days };
-  }).sort((a,b) => a.days-b.days);
-  function handleUpdate() {
-    setEquipment(prev => prev.map(e => e.id===modal.id ? { ...e, lastMaintenance: form.date } : e));
-    setModal(null);
+function EquipmentTab({ setEquipment }) {
+  const [rows, setRows]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr]         = useState("");
+  const [saving, setSaving]   = useState(false);
+  const [modal, setModal]     = useState(null);
+  const [form, setForm]       = useState({});
+
+  function toFrontend(eq) {
+    return {
+      id: eq.equip_no, name: eq.equip_name, location: eq.location,
+      lastMaintenance: eq.last_maint_date || "", intervalDays: eq.interval_days,
+      nextItems: Array.isArray(eq.maint_items) ? eq.maint_items : [], _id: eq.id,
+    };
   }
+
+  async function load() {
+    setLoading(true); setErr("");
+    try {
+      const body = await erpApiJson("/api/equipment");
+      const data = body.data || [];
+      setRows(data);
+      if (setEquipment) setEquipment(data.map(toFrontend));
+      if (data.length === 0) {
+        // 首次種入 initialEquipment
+        const payload = initialEquipment.map(e => ({
+          equip_no: e.id, equip_name: e.name, location: e.location || "",
+          interval_days: e.intervalDays || 90,
+          maint_items: JSON.stringify(e.nextItems || []),
+          status: "active",
+        }));
+        await erpApiJson("/api/equipment/bulk-seed", { method: "POST", body: JSON.stringify(payload) });
+        // Seed last maintenance as first record
+        const body2 = await erpApiJson("/api/equipment");
+        const equips = body2.data || [];
+        setRows(equips);
+        if (setEquipment) setEquipment(equips.map(toFrontend));
+        const eqMap = {};
+        equips.forEach(e => { eqMap[e.equip_no] = e.id; });
+        for (const e of initialEquipment) {
+          if (!e.lastMaintenance || !eqMap[e.id]) continue;
+          await erpApiJson("/api/equipment-records", { method: "POST", body: JSON.stringify({
+            equipment_id: eqMap[e.id], maint_date: e.lastMaintenance,
+            items_done: JSON.stringify(e.nextItems || []), result: "正常",
+          })}).catch(() => null);
+        }
+        const body3 = await erpApiJson("/api/equipment");
+        setRows(body3.data || []);
+        if (setEquipment) setEquipment((body3.data || []).map(toFrontend));
+      }
+    } catch (e) {
+      setErr(e.message || "載入失敗");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function handleRecord() {
+    if (!form.date) { alert("請選擇保養日期"); return; }
+    setSaving(true);
+    try {
+      await erpApiJson("/api/equipment-records", {
+        method: "POST",
+        body: JSON.stringify({
+          equipment_id: modal._id,
+          maint_date: form.date,
+          performed_by: form.performed_by || "",
+          items_done: JSON.stringify(Array.isArray(modal.maint_items) ? modal.maint_items : []),
+          result: form.result || "正常",
+          remarks: form.remarks || "",
+        }),
+      });
+      setModal(null);
+      await load();
+    } catch (e) {
+      alert("儲存失敗：" + e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const enriched = rows.map(eq => {
+    const nextDate = eq.last_maint_date ? addDays(eq.last_maint_date, eq.interval_days) : null;
+    const days = nextDate ? daysUntil(nextDate) : -9999;
+    return { ...eq, nextDate, days };
+  }).sort((a, b) => a.days - b.days);
+
   return (
     <div>
-      <SectionHeader title="設備保養追蹤" count={equipment.length} color="#fb923c" />
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <StatCard label="逾期保養" value={enriched.filter(e=>e.days<0).length} color="#ef4444" />
-        <StatCard label="本月到期" value={enriched.filter(e=>e.days>=0&&e.days<=30).length} color="#f97316" />
-        <StatCard label="正常" value={enriched.filter(e=>e.days>30).length} color="#22c55e" />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {enriched.map(eq => (
-          <div key={eq.id} style={{ background: urgencyBg(eq.days), border: `1px solid ${urgencyColor(eq.days)}33`, borderRadius: 12, padding: "16px 18px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 10 }}>
-              <div style={{ flex: 1, minWidth: 200 }}><div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{eq.name}</div><div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{eq.id} · {eq.location} · 每 {eq.intervalDays} 天保養一次</div></div>
-              <div style={{ textAlign: "right", minWidth: 120 }}><div style={{ fontSize: 12, color: "#64748b" }}>下次保養</div><div style={{ fontWeight: 700, color: "#e2e8f0" }}>{formatDate(eq.nextDate)}</div></div>
-              <Badge color={urgencyColor(eq.days)}>{urgencyLabel(eq.days)}</Badge>
-              <button onClick={() => { setModal(eq); setForm({ date: new Date().toISOString().split("T")[0] }); }} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, color: "#94a3b8", cursor: "pointer", padding: "6px 14px", fontSize: 12 }}>記錄保養</button>
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>保養項目：</span>
-              {eq.nextItems.map((item,i) => (<span key={i} style={{ fontSize: 11, background: "rgba(251,146,60,0.1)", color: "#fb923c", borderRadius: 6, padding: "2px 8px", border: "1px solid rgba(251,146,60,0.2)" }}>{item}</span>))}
-            </div>
+      <SectionHeader title="設備保養追蹤（ISO 7.1.3）" count={rows.length} color="#fb923c" />
+      {err && <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, color: "#fca5a5", fontSize: 13 }}>⚠ {err}（請確認 ERP 服務已啟動並已登入）</div>}
+      {loading ? <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>載入中…</div> : (
+        <>
+          <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+            <StatCard label="逾期保養" value={enriched.filter(e => e.days < 0).length} color="#ef4444" />
+            <StatCard label="30天內到期" value={enriched.filter(e => e.days >= 0 && e.days <= 30).length} color="#f97316" />
+            <StatCard label="正常" value={enriched.filter(e => e.days > 30).length} color="#22c55e" />
           </div>
-        ))}
-      </div>
-      {modal && (<Modal title={`記錄保養完成：${modal.name}`} onClose={() => setModal(null)}><div style={{ display: "flex", flexDirection: "column", gap: 16 }}><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>保養完成日期</div><input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})} style={inputStyle} /></div><div style={{ background: "rgba(251,146,60,0.1)", borderRadius: 8, padding: 12 }}><div style={{ fontSize: 12, color: "#fb923c", fontWeight: 600, marginBottom: 8 }}>本次保養項目：</div>{modal.nextItems.map((item,i) => (<div key={i} style={{ color: "#fed7aa", fontSize: 13, marginBottom: 4 }}>☑ {item}</div>))}</div><button onClick={handleUpdate} style={{ background: "linear-gradient(135deg, #ea580c, #f97316)", border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", padding: "12px 24px", fontSize: 15, fontWeight: 700 }}>✓ 確認保養完成</button></div></Modal>)}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {enriched.map(eq => (
+              <div key={eq.id} style={{ background: urgencyBg(eq.days), border: `1px solid ${urgencyColor(eq.days)}33`, borderRadius: 12, padding: "16px 18px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 8 }}>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{eq.equip_name}</div>
+                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{eq.equip_no} · {eq.location} · 每 {eq.interval_days} 天保養一次</div>
+                  </div>
+                  <div style={{ textAlign: "right", minWidth: 140 }}>
+                    <div style={{ fontSize: 11, color: "#64748b" }}>上次保養　<span style={{ color: "#94a3b8" }}>{formatDate(eq.last_maint_date) || "未建立"}</span></div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>下次保養</div>
+                    <div style={{ fontWeight: 700, color: "#e2e8f0" }}>{formatDate(eq.nextDate) || "—"}</div>
+                  </div>
+                  <Badge color={urgencyColor(eq.days)}>{urgencyLabel(eq.days)}</Badge>
+                  <button
+                    onClick={() => { setModal(eq); setForm({ date: new Date().toISOString().slice(0, 10), result: "正常" }); }}
+                    style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, color: "#94a3b8", cursor: "pointer", padding: "6px 14px", fontSize: 12 }}
+                  >記錄保養</button>
+                </div>
+                {Array.isArray(eq.maint_items) && eq.maint_items.length > 0 && (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>保養項目：</span>
+                    {eq.maint_items.map((item, i) => (
+                      <span key={i} style={{ fontSize: 11, background: "rgba(251,146,60,0.1)", color: "#fb923c", borderRadius: 6, padding: "2px 8px", border: "1px solid rgba(251,146,60,0.2)" }}>{item}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {modal && (
+        <Modal title={`記錄保養完成：${modal.equip_name}`} onClose={() => setModal(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>保養完成日期 *</div><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inputStyle} /></div>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>執行人員</div><input value={form.performed_by || ""} onChange={e => setForm({ ...form, performed_by: e.target.value })} style={inputStyle} placeholder="姓名" /></div>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>保養結果</div>
+              <select value={form.result || "正常"} onChange={e => setForm({ ...form, result: e.target.value })} style={inputStyle}>
+                <option>正常</option><option>異常待修</option><option>已修復</option>
+              </select>
+            </div>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>備註</div><input value={form.remarks || ""} onChange={e => setForm({ ...form, remarks: e.target.value })} style={inputStyle} placeholder="可留空" /></div>
+            {Array.isArray(modal.maint_items) && modal.maint_items.length > 0 && (
+              <div style={{ background: "rgba(251,146,60,0.1)", borderRadius: 8, padding: 12 }}>
+                <div style={{ fontSize: 12, color: "#fb923c", fontWeight: 600, marginBottom: 8 }}>本次保養項目：</div>
+                {modal.maint_items.map((item, i) => <div key={i} style={{ color: "#fed7aa", fontSize: 13, marginBottom: 4 }}>☑ {item}</div>)}
+              </div>
+            )}
+            <button onClick={handleRecord} disabled={saving} style={{ background: "linear-gradient(135deg, #ea580c, #f97316)", border: "none", borderRadius: 10, color: "#fff", cursor: saving ? "not-allowed" : "pointer", padding: "12px 24px", fontSize: 15, fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
+              {saving ? "儲存中…" : "✓ 確認保養完成"}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
 
 // ─── SUPPLIER TAB (MP-10) ────────────────────────────────────────────────────
-function SupplierTab({ suppliers, setSuppliers }) {
-  const [modal, setModal] = useState(null);
-  const [form, setForm] = useState({});
-  const enriched = suppliers.map(s => {
-    const nextEvalDate = addDays(s.lastEvalDate, s.evalIntervalDays);
-    const days = daysUntil(nextEvalDate);
-    return { ...s, nextEvalDate, days };
-  }).sort((a,b) => a.days-b.days);
-  function handleUpdate() {
-    setSuppliers(prev => prev.map(s => s.id===modal.id ? { ...s, lastEvalDate: form.date, evalScore: parseInt(form.score), evalResult: parseInt(form.score)>=90?"優良":parseInt(form.score)>=80?"合格":parseInt(form.score)>=70?"條件合格":"不合格" } : s));
-    setModal(null);
+function SupplierTab({ suppliers: localSuppliers, setSuppliers }) {
+  const [rows, setRows]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr]         = useState("");
+  const [saving, setSaving]   = useState(false);
+  const [modal, setModal]     = useState(null);
+  const [form, setForm]       = useState({});
+
+  const scoreColor = s => s >= 90 ? "#22c55e" : s >= 80 ? "#60a5fa" : s >= 70 ? "#eab308" : "#ef4444";
+  const scoreLabel = s => s >= 90 ? "優良" : s >= 80 ? "合格" : s >= 70 ? "條件合格" : "不合格";
+
+  async function load() {
+    setLoading(true); setErr("");
+    try {
+      // Load ERP suppliers + evaluations in parallel
+      const [supBody, evalBody] = await Promise.all([
+        erpApiJson("/api/master/suppliers"),
+        erpApiJson("/api/supplier-evaluations"),
+      ]);
+      const erpSups = supBody.data || [];
+      const evals = evalBody.data || [];
+
+      // Build latest-eval map by supplier_id
+      const evalMap = {};
+      evals.forEach(e => {
+        if (!evalMap[e.supplier_id] || e.eval_date > evalMap[e.supplier_id].eval_date) {
+          evalMap[e.supplier_id] = e;
+        }
+      });
+
+      // Merge
+      const merged = erpSups.map(s => ({
+        ...s,
+        latestEval: evalMap[s.id] || null,
+        evalScore:  evalMap[s.id]?.eval_score  ?? null,
+        evalResult: evalMap[s.id]?.eval_result ?? "未評鑑",
+        lastEvalDate: evalMap[s.id]?.eval_date ?? "",
+        nextEvalDate: evalMap[s.id]?.next_eval_date ?? "",
+        issues: evalMap[s.id]?.issues ?? [],
+      }));
+      setRows(merged);
+      if (setSuppliers) setSuppliers(merged.map(s => ({
+        id: s.supplier_code || s.id, name: s.supplier_name,
+        category: s.category || "", contact: s.contact_person || "",
+        lastEvalDate: s.lastEvalDate, evalScore: s.evalScore || 0,
+        evalResult: s.evalResult, evalIntervalDays: 365, issues: s.issues,
+      })));
+    } catch (e) {
+      // Fallback to local state if ERP not available
+      setErr(e.message || "載入失敗");
+      if (localSuppliers) setRows(localSuppliers.map(s => ({
+        id: s.id, supplier_name: s.name, supplier_code: s.id,
+        category: s.category, contact_person: s.contact,
+        evalScore: s.evalScore, evalResult: s.evalResult,
+        lastEvalDate: s.lastEvalDate, nextEvalDate: addDays(s.lastEvalDate, 365),
+        issues: s.issues || [],
+        _isLocal: true,
+      })));
+    } finally {
+      setLoading(false);
+    }
   }
-  const scoreColor = s => s>=90?"#22c55e":s>=80?"#60a5fa":s>=70?"#eab308":"#ef4444";
+
+  useEffect(() => { load(); }, []);
+
+  async function handleUpdate() {
+    const score = parseInt(form.score);
+    const result = scoreLabel(score);
+    if (modal._isLocal) {
+      // Local-only fallback
+      setSuppliers && setSuppliers(prev => prev.map(s => s.id === modal.id ? { ...s, lastEvalDate: form.date, evalScore: score, evalResult: result } : s));
+      setModal(null); return;
+    }
+    setSaving(true);
+    try {
+      await erpApiJson("/api/supplier-evaluations", {
+        method: "POST",
+        body: JSON.stringify({
+          supplier_id: modal.id,
+          eval_date: form.date,
+          eval_score: score,
+          eval_result: result,
+          eval_by: form.eval_by || "",
+          remarks: form.remarks || "",
+        }),
+      });
+      setModal(null);
+      await load();
+    } catch (e) {
+      alert("儲存失敗：" + e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const enriched = rows.map(s => {
+    const days = s.nextEvalDate ? daysUntil(s.nextEvalDate) : (s.lastEvalDate ? daysUntil(addDays(s.lastEvalDate, 365)) : -9999);
+    return { ...s, days };
+  }).sort((a, b) => a.days - b.days);
+
   return (
     <div>
-      <SectionHeader title="供應商評鑑管理（MP-10）" count={suppliers.length} color="#06b6d4" />
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <StatCard label="供應商總數" value={suppliers.length} color="#06b6d4" />
-        <StatCard label="優良" value={enriched.filter(s=>s.evalResult==="優良").length} color="#22c55e" />
-        <StatCard label="條件合格" value={enriched.filter(s=>s.evalResult==="條件合格").length} color="#eab308" />
-        <StatCard label="評鑑逾期" value={enriched.filter(s=>s.days<0).length} color="#ef4444" />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {enriched.map(s => (
-          <div key={s.id} style={{ background: urgencyBg(s.days), border: `1px solid ${urgencyColor(s.days)}33`, borderRadius: 12, padding: "16px 18px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: s.issues.length>0?10:0 }}>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{s.name}</div>
-                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{s.id} · {s.category} · 聯絡人：{s.contact}</div>
-              </div>
-              <div style={{ textAlign: "right", minWidth: 90 }}>
-                <div style={{ fontSize: 24, fontWeight: 800, color: scoreColor(s.evalScore), fontFamily: "monospace" }}>{s.evalScore}</div>
-                <div style={{ fontSize: 11, color: "#64748b" }}>分</div>
-              </div>
-              <Badge color={s.evalResult==="優良"?"#22c55e":s.evalResult==="合格"?"#60a5fa":s.evalResult==="條件合格"?"#eab308":"#ef4444"}>{s.evalResult}</Badge>
-              <div style={{ textAlign: "right", minWidth: 120 }}>
-                <div style={{ fontSize: 12, color: "#64748b" }}>下次評鑑</div>
-                <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 13 }}>{formatDate(s.nextEvalDate)}</div>
-              </div>
-              <Badge color={urgencyColor(s.days)}>{urgencyLabel(s.days)}</Badge>
-              <button onClick={() => { setModal(s); setForm({ date: new Date().toISOString().split("T")[0], score: s.evalScore }); }} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, color: "#94a3b8", cursor: "pointer", padding: "6px 14px", fontSize: 12 }}>更新評鑑</button>
-            </div>
-            {s.issues.length>0 && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 11, color: "#ef4444", fontWeight: 600 }}>問題項目：</span>
-                {s.issues.map((issue,i) => (<span key={i} style={{ fontSize: 11, background: "rgba(239,68,68,0.1)", color: "#f87171", borderRadius: 6, padding: "2px 8px", border: "1px solid rgba(239,68,68,0.2)" }}>{issue}</span>))}
-              </div>
-            )}
+      <SectionHeader title="供應商評鑑管理（ISO 8.4）" count={rows.length} color="#06b6d4" />
+      {err && <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 10, padding: "10px 14px", marginBottom: 14, color: "#fca5a5", fontSize: 12 }}>⚠ {err}　（顯示本地資料）</div>}
+      {loading ? <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>載入中…</div> : (
+        <>
+          <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+            <StatCard label="供應商總數" value={rows.length} color="#06b6d4" />
+            <StatCard label="優良" value={enriched.filter(s => s.evalResult === "優良").length} color="#22c55e" />
+            <StatCard label="條件合格" value={enriched.filter(s => s.evalResult === "條件合格").length} color="#eab308" />
+            <StatCard label="評鑑逾期" value={enriched.filter(s => s.days < 0).length} color="#ef4444" />
           </div>
-        ))}
-      </div>
-      {modal && (<Modal title={`更新評鑑：${modal.name}`} onClose={() => setModal(null)}><div style={{ display: "flex", flexDirection: "column", gap: 16 }}><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>評鑑日期</div><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})} style={inputStyle} /></div><div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>評鑑總分 (0-100)</div><input type="number" min="0" max="100" value={form.score} onChange={e=>setForm({...form,score:e.target.value})} style={inputStyle} /></div><div style={{ background: "rgba(6,182,212,0.1)", borderRadius: 8, padding: 12 }}><div style={{ fontSize: 12, color: "#22d3ee", fontWeight: 600 }}>評定等級：{parseInt(form.score)>=90?"優良":parseInt(form.score)>=80?"合格":parseInt(form.score)>=70?"條件合格":"不合格"}</div><div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>90+優良 / 80-89合格 / 70-79條件合格 / 69以下不合格</div></div><button onClick={handleUpdate} style={{ background: "linear-gradient(135deg, #0891b2, #06b6d4)", border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", padding: "12px 24px", fontSize: 15, fontWeight: 700 }}>✓ 確認更新評鑑</button></div></Modal>)}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {enriched.map(s => (
+              <div key={s.id} style={{ background: urgencyBg(s.days), border: `1px solid ${urgencyColor(s.days)}33`, borderRadius: 12, padding: "16px 18px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: s.issues?.length > 0 ? 10 : 0 }}>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 14 }}>{s.supplier_name || s.name}</div>
+                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{s.supplier_code || s.id} · {s.category} · {s.contact_person ? `聯絡人：${s.contact_person}` : ""}</div>
+                  </div>
+                  <div style={{ textAlign: "right", minWidth: 90 }}>
+                    {s.evalScore != null ? (
+                      <>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: scoreColor(s.evalScore), fontFamily: "monospace" }}>{s.evalScore}</div>
+                        <div style={{ fontSize: 11, color: "#64748b" }}>分</div>
+                      </>
+                    ) : <div style={{ fontSize: 13, color: "#475569" }}>未評鑑</div>}
+                  </div>
+                  <Badge color={s.evalResult === "優良" ? "#22c55e" : s.evalResult === "合格" ? "#60a5fa" : s.evalResult === "條件合格" ? "#eab308" : s.evalResult === "未評鑑" ? "#64748b" : "#ef4444"}>{s.evalResult}</Badge>
+                  <div style={{ textAlign: "right", minWidth: 120 }}>
+                    <div style={{ fontSize: 11, color: "#64748b" }}>上次評鑑　{formatDate(s.lastEvalDate) || "—"}</div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>下次評鑑</div>
+                    <div style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 13 }}>{formatDate(s.nextEvalDate) || "未排定"}</div>
+                  </div>
+                  <Badge color={urgencyColor(s.days)}>{urgencyLabel(s.days)}</Badge>
+                  <button onClick={() => { setModal(s); setForm({ date: new Date().toISOString().slice(0, 10), score: s.evalScore || 90 }); }} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, color: "#94a3b8", cursor: "pointer", padding: "6px 14px", fontSize: 12 }}>更新評鑑</button>
+                </div>
+                {s.issues?.length > 0 && (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: "#ef4444", fontWeight: 600 }}>問題項目：</span>
+                    {s.issues.map((issue, i) => <span key={i} style={{ fontSize: 11, background: "rgba(239,68,68,0.1)", color: "#f87171", borderRadius: 6, padding: "2px 8px", border: "1px solid rgba(239,68,68,0.2)" }}>{issue}</span>)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {modal && (
+        <Modal title={`更新評鑑：${modal.supplier_name || modal.name}`} onClose={() => setModal(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>評鑑日期 *</div><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inputStyle} /></div>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>評鑑總分（0-100）</div><input type="number" min="0" max="100" value={form.score} onChange={e => setForm({ ...form, score: e.target.value })} style={inputStyle} /></div>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>評鑑人員</div><input value={form.eval_by || ""} onChange={e => setForm({ ...form, eval_by: e.target.value })} style={inputStyle} placeholder="姓名" /></div>
+            <div><div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>備註</div><input value={form.remarks || ""} onChange={e => setForm({ ...form, remarks: e.target.value })} style={inputStyle} placeholder="可留空" /></div>
+            <div style={{ background: "rgba(6,182,212,0.1)", borderRadius: 8, padding: 12 }}>
+              <div style={{ fontSize: 12, color: "#22d3ee", fontWeight: 600 }}>評定等級：{scoreLabel(parseInt(form.score) || 0)}</div>
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>90+ 優良 ／ 80-89 合格 ／ 70-79 條件合格 ／ 69以下 不合格</div>
+            </div>
+            <button onClick={handleUpdate} disabled={saving} style={{ background: "linear-gradient(135deg, #0891b2, #06b6d4)", border: "none", borderRadius: 10, color: "#fff", cursor: saving ? "not-allowed" : "pointer", padding: "12px 24px", fontSize: 15, fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
+              {saving ? "儲存中…" : "✓ 確認更新評鑑"}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -2177,12 +2536,34 @@ function NonConformanceTab({ nonConformances: items, setNonConformances: setItem
     setBusy("save");
     setMessage("");
     try {
-      const payload = await apiJson("/api/nonconformances", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ record }),
-      });
-      setItems(payload.items || []);
+      const isExisting = items.some(x => String(x.id) === String(record.id));
+      if (isExisting) {
+        await erpApiJson("/api/nc/" + encodeURIComponent(record.id), {
+          method: "PATCH",
+          body: JSON.stringify({
+            nc_date: record.date, dept: record.dept, nc_type: record.type,
+            description: record.description, severity: record.severity,
+            root_cause: record.rootCause || "", corrective_action: record.correctiveAction || "",
+            responsible: record.responsible || "", due_date: record.dueDate || "",
+            status: record.status, close_date: record.closeDate || "",
+            effectiveness: record.effectiveness || "",
+          }),
+        });
+      } else {
+        await erpApiJson("/api/nc", {
+          method: "POST",
+          body: JSON.stringify({
+            nc_no: record.id, nc_date: record.date, dept: record.dept, nc_type: record.type,
+            description: record.description, severity: record.severity,
+            root_cause: record.rootCause || "", corrective_action: record.correctiveAction || "",
+            responsible: record.responsible || "", due_date: record.dueDate || "",
+            status: record.status, close_date: record.closeDate || "",
+            effectiveness: record.effectiveness || "",
+          }),
+        });
+      }
+      const listBody = await erpApiJson("/api/nc");
+      setItems(listBody.data || []);
       setMessage(doneMessage);
       return true;
     } catch (err) {
@@ -2210,8 +2591,9 @@ function NonConformanceTab({ nonConformances: items, setNonConformances: setItem
     setBusy("delete");
     setMessage("");
     try {
-      const payload = await apiJson("/api/nonconformances/" + encodeURIComponent(id), { method: "DELETE" });
-      setItems(payload.items || []);
+      await erpApiJson("/api/nc/" + encodeURIComponent(id), { method: "DELETE" });
+      const listBody = await erpApiJson("/api/nc");
+      setItems(listBody.data || []);
       setModal(null);
       setMessage("已刪除不符合報告。");
     } catch (err) {
@@ -2322,13 +2704,8 @@ function AuditPlanTab({ auditPlans, setAuditPlans }) {
       }
       setAttachmentBusy(true);
       try {
-        const payload = await apiJson("/api/audit-plans/" + encodeURIComponent(modal.id) + "/attachments");
-        if (!cancelled) setAttachments(payload.attachments || []);
-      } catch (err) {
-        if (!cancelled) {
-          setAttachments([]);
-          setMessage("附件讀取失敗：" + err.message);
-        }
+        // 附件功能尚未實作，直接清空
+        if (!cancelled) setAttachments([]);
       } finally {
         if (!cancelled) setAttachmentBusy(false);
       }
@@ -2341,12 +2718,26 @@ function AuditPlanTab({ auditPlans, setAuditPlans }) {
     setBusy("save");
     setMessage("");
     try {
-      const payload = await apiJson("/api/audit-plans", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records }),
-      });
-      setAuditPlans(payload.items || []);
+      for (const rec of records) {
+        const isExisting = auditPlans.some(x => String(x.id) === String(rec.id));
+        const body = {
+          year: rec.year, period: rec.period, scheduled_date: rec.scheduledDate,
+          dept: rec.dept, scope: rec.scope, auditor: rec.auditor, auditee: rec.auditee,
+          status: rec.status, actual_date: rec.actualDate || "",
+          findings: rec.findings || 0, nc_count: rec.ncCount || 0,
+        };
+        if (isExisting) {
+          await erpApiJson("/api/audit-plans/" + encodeURIComponent(rec.id), {
+            method: "PATCH", body: JSON.stringify(body),
+          });
+        } else {
+          await erpApiJson("/api/audit-plans", {
+            method: "POST", body: JSON.stringify({ plan_no: rec.id, ...body }),
+          });
+        }
+      }
+      const listBody = await erpApiJson("/api/audit-plans");
+      setAuditPlans(listBody.data || []);
       setMessage(doneMessage);
       return true;
     } catch (err) {
@@ -2366,8 +2757,9 @@ function AuditPlanTab({ auditPlans, setAuditPlans }) {
     if (!window.confirm("確定要刪除這筆稽核計畫嗎？")) return;
     setBusy("delete");
     try {
-      const payload = await apiJson("/api/audit-plans/" + encodeURIComponent(id), { method:"DELETE" });
-      setAuditPlans(payload.items || []);
+      await erpApiJson("/api/audit-plans/" + encodeURIComponent(id), { method:"DELETE" });
+      const listBody = await erpApiJson("/api/audit-plans");
+      setAuditPlans(listBody.data || []);
       setModal(null);
       setMessage("已刪除稽核計畫。");
     } catch (err) {
@@ -6079,10 +6471,59 @@ function EnvParticlePanel() {
   const MONTHS = ["2025-11","2025-12","2026-01","2026-02","2026-03"];
   const MONTH_LABEL = { "2025-11":"25/11月","2025-12":"25/12月","2026-01":"26/01月","2026-02":"26/02月","2026-03":"26/03月" };
 
+  const [particleData, setParticleData] = React.useState(null); // null = loading
+  const [seedError, setSeedError] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        // Check if any records exist
+        const countBody = await erpApiJson("/api/env-particle/count");
+        const total = countBody.data?.total ?? 0;
+        if (total === 0) {
+          // Bulk-seed from static array
+          const seedPayload = {
+            records: ENV_PARTICLE_DATA.map(r => ({
+              meas_date: r.date,
+              run: r.run,
+              session: r.session,
+              n_samples: r.N,
+              ch1avg: r.ch1avg,
+              ch1max: r.ch1max,
+              ch2avg: r.ch2avg,
+              ch2max: r.ch2max,
+              ch3avg: r.ch3avg,
+              ch3max: r.ch3max,
+              note: r.note || "",
+            }))
+          };
+          await erpApiJson("/api/env-particle/bulk-seed", { method: "POST", body: JSON.stringify(seedPayload) });
+        }
+        // Load all records
+        const body = await erpApiJson("/api/env-particle?limit=1000");
+        if (cancelled) return;
+        // Normalise API rows to same shape as ENV_PARTICLE_DATA (date field)
+        const rows = (body.data || []).map(r => ({ ...r, date: r.meas_date, N: r.N ?? 14 }));
+        setParticleData(rows.length > 0 ? rows : ENV_PARTICLE_DATA);
+      } catch (_) {
+        if (!cancelled) {
+          setSeedError(true);
+          setParticleData(ENV_PARTICLE_DATA);
+        }
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  // While loading, fall back to static data for instant render
+  const DATA = particleData ?? ENV_PARTICLE_DATA;
+
   // Monthly aggregation
   const mStats = {};
   MONTHS.forEach(m => { mStats[m] = { runs:0, passes:0, ch1sum:0, ch1n:0, ch1maxAll:0, ch3sum:0 }; });
-  ENV_PARTICLE_DATA.forEach(r => {
+  DATA.forEach(r => {
     const m = r.date.substring(0, 7);
     if (!mStats[m]) return;
     const ok = ENV_PARTICLE_OK(r);
@@ -6091,11 +6532,11 @@ function EnvParticlePanel() {
     if (r.ch1max > mStats[m].ch1maxAll) mStats[m].ch1maxAll = r.ch1max;
   });
 
-  const totalRuns   = ENV_PARTICLE_DATA.length;
-  const totalPasses = ENV_PARTICLE_DATA.filter(ENV_PARTICLE_OK).length;
+  const totalRuns   = DATA.length;
+  const totalPasses = DATA.filter(ENV_PARTICLE_OK).length;
   const passRate    = Math.round(totalPasses / totalRuns * 100);
-  const highEvents  = ENV_PARTICLE_DATA.filter(r => !ENV_PARTICLE_OK(r));
-  const latestRun   = ENV_PARTICLE_DATA[ENV_PARTICLE_DATA.length - 1];
+  const highEvents  = DATA.filter(r => !ENV_PARTICLE_OK(r));
+  const latestRun   = DATA[DATA.length - 1];
 
   const pctCol = v => v >= 95 ? "#22c55e" : v >= 85 ? "#f59e0b" : "#ef4444";
 
@@ -7980,19 +8421,62 @@ function App() {
     if (!authUser) return;
     let cancelled = false;
     async function loadOpsData() {
+      // ── NC ──
       try {
-        const [ncPayload, auditPayload, envPayload] = await Promise.all([
-          apiJson("/api/nonconformances"),
-          apiJson("/api/audit-plans"),
-          apiJson("/api/environment-records"),
-        ]);
-        if (cancelled) return;
-        setNonConformances(ncPayload.items || []);
-        setAuditPlans(auditPayload.items || []);
-        setEnvRecords(envPayload.items || []);
-      } catch (err) {
-        console.warn("Failed to load operation data", err);
-      }
+        const ncCount = await erpApiJson("/api/nc/count");
+        if ((ncCount.data?.total ?? 0) === 0) {
+          await erpApiJson("/api/nc/bulk-seed", {
+            method: "POST",
+            body: JSON.stringify({
+              records: initialNonConformances.map(n => ({
+                nc_no: n.id,
+                nc_date: n.date,
+                dept: n.dept,
+                nc_type: n.type,
+                description: n.description,
+                severity: n.severity,
+                root_cause: n.rootCause || "",
+                corrective_action: n.correctiveAction || "",
+                responsible: n.responsible || "",
+                due_date: n.dueDate || "",
+                status: n.status,
+                close_date: n.closeDate || "",
+                effectiveness: n.effectiveness || "",
+              })),
+            }),
+          });
+        }
+        const ncBody = await erpApiJson("/api/nc");
+        if (!cancelled) setNonConformances(ncBody.data || []);
+      } catch (_) { /* 靜默降級，保留 initialNonConformances */ }
+
+      // ── 稽核計畫 ──
+      try {
+        const apCount = await erpApiJson("/api/audit-plans/count");
+        if ((apCount.data?.total ?? 0) === 0) {
+          await erpApiJson("/api/audit-plans/bulk-seed", {
+            method: "POST",
+            body: JSON.stringify({
+              records: initialAuditPlans.map(a => ({
+                plan_no: a.id,
+                year: a.year,
+                period: a.period,
+                scheduled_date: a.scheduledDate,
+                dept: a.dept,
+                scope: a.scope,
+                auditor: a.auditor,
+                auditee: a.auditee,
+                status: a.status,
+                actual_date: a.actualDate || "",
+                findings: a.findings || 0,
+                nc_count: a.ncCount || 0,
+              })),
+            }),
+          });
+        }
+        const apBody = await erpApiJson("/api/audit-plans");
+        if (!cancelled) setAuditPlans(apBody.data || []);
+      } catch (_) { /* 靜默降級，保留 initialAuditPlans */ }
     }
     loadOpsData();
     return () => { cancelled = true; };
@@ -8038,6 +8522,29 @@ function App() {
     return () => { cancelled = true; };
   }, [authUser]);
 
+  // ── 設備保養：App 層輕量載入，供儀表板使用 ──────────────────
+  useEffect(() => {
+    if (!authUser) return;
+    let cancelled = false;
+    async function loadEquipment() {
+      try {
+        const body = await erpApiJson("/api/equipment");
+        if (cancelled) return;
+        const data = body.data || [];
+        if (data.length > 0) {
+          setEquipment(data.map(eq => ({
+            id: eq.equip_no, name: eq.equip_name, location: eq.location,
+            lastMaintenance: eq.last_maint_date || "",
+            intervalDays: eq.interval_days,
+            nextItems: Array.isArray(eq.maint_items) ? eq.maint_items : [],
+          })));
+        }
+      } catch (_) { /* 靜默降級，保留 initialEquipment */ }
+    }
+    loadEquipment();
+    return () => { cancelled = true; };
+  }, [authUser]);
+
   // ── 未登入 → 顯示登入畫面 ────────────────────────────────────
   if (!authUser) return (
     <ThemeContext.Provider value={theme}>
@@ -8080,9 +8587,9 @@ function App() {
       case "calibration":    return <PageErrorBoundary pageName="校正管理"><CalibrationTab setInstruments={setInstruments} /></PageErrorBoundary>;
       case "documents":      return <PageErrorBoundary pageName="文件管理"><DocumentsManagerTab documents={documents} setDocuments={setDocuments} manuals={manuals} /></PageErrorBoundary>;
       case "library":        return <PageErrorBoundary pageName="文件庫"><LibraryHierarchyTab documents={documents} manuals={manuals} /></PageErrorBoundary>;
-      case "training":       return <PageErrorBoundary pageName="訓練管理"><TrainingTab training={training} setTraining={setTraining} /></PageErrorBoundary>;
-      case "equipment":      return <PageErrorBoundary pageName="設備保養" storageKeys={["audit_equipment"]}><EquipmentTab equipment={equipment} setEquipment={setEquipment} /></PageErrorBoundary>;
-      case "supplier":       return <PageErrorBoundary pageName="供應商管理"><SupplierTab suppliers={suppliers} setSuppliers={setSuppliers} /></PageErrorBoundary>;
+      case "training":       return <PageErrorBoundary pageName="訓練管理"><TrainingTab setTraining={setTraining} /></PageErrorBoundary>;
+      case "equipment":      return <PageErrorBoundary pageName="設備保養"><EquipmentTab setEquipment={setEquipment} /></PageErrorBoundary>;
+      case "supplier":       return <PageErrorBoundary pageName="供應商管理"><SupplierTab suppliers={suppliers} setSuppliers={setSuppliers} /></PageErrorBoundary>; // suppliers fallback for dashboard
       case "nonconformance": return <PageErrorBoundary pageName="不符合管理"><NonConformanceTab nonConformances={nonConformances} setNonConformances={setNonConformances} highlightNcId={highlightNcId} onHighlightDone={() => setHighlightNcId(null)} expandNcId={expandNcId} onExpandDone={() => setExpandNcId(null)} ncPrefill={ncPrefill} setNcPrefill={setNcPrefill} /></PageErrorBoundary>;
       case "auditplan":      return <PageErrorBoundary pageName="稽核計畫"><AuditPlanTab auditPlans={auditPlans} setAuditPlans={setAuditPlans} /></PageErrorBoundary>;
       case "environment":    return <PageErrorBoundary pageName="環境監測"><EnvironmentTab envRecords={envRecords} setEnvRecords={setEnvRecords} /></PageErrorBoundary>;
