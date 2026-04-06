@@ -20,6 +20,7 @@ from .documents import QmsDocument
 from .training import TrainingEmployee, TrainingRecord
 from .equipment import EquipmentMaster, MaintenanceRecord
 from .supplier_eval import SupplierEvaluation
+from .env_particle import EnvParticleRecord
 
 __all__ = [
     "Base",
@@ -52,4 +53,5 @@ __all__ = [
     "EquipmentMaster",
     "MaintenanceRecord",
     "SupplierEvaluation",
+    "EnvParticleRecord",
 ]

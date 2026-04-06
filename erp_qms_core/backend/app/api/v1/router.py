@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from . import auth, bom, calibration, customers, documents, equipment, health, inventory, orders, products, shipments, supplier_eval, suppliers, training
+from . import auth, bom, calibration, customers, documents, env_particle, equipment, health, inventory, orders, products, shipments, supplier_eval, suppliers, training
 
 router = APIRouter(prefix="/api", tags=["erp-qms-core"])
 
@@ -20,3 +20,4 @@ router.include_router(documents.router)
 router.include_router(training.router)
 router.include_router(equipment.router)
 router.include_router(supplier_eval.router)
+router.include_router(env_particle.router)

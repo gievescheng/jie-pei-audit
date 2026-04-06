@@ -6438,10 +6438,59 @@ function EnvParticlePanel() {
   const MONTHS = ["2025-11","2025-12","2026-01","2026-02","2026-03"];
   const MONTH_LABEL = { "2025-11":"25/11月","2025-12":"25/12月","2026-01":"26/01月","2026-02":"26/02月","2026-03":"26/03月" };
 
+  const [particleData, setParticleData] = React.useState(null); // null = loading
+  const [seedError, setSeedError] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        // Check if any records exist
+        const countBody = await erpApiJson("/api/env-particle/count");
+        const total = countBody.data?.total ?? 0;
+        if (total === 0) {
+          // Bulk-seed from static array
+          const seedPayload = {
+            records: ENV_PARTICLE_DATA.map(r => ({
+              meas_date: r.date,
+              run: r.run,
+              session: r.session,
+              n_samples: r.N,
+              ch1avg: r.ch1avg,
+              ch1max: r.ch1max,
+              ch2avg: r.ch2avg,
+              ch2max: r.ch2max,
+              ch3avg: r.ch3avg,
+              ch3max: r.ch3max,
+              note: r.note || "",
+            }))
+          };
+          await erpApiJson("/api/env-particle/bulk-seed", { method: "POST", body: JSON.stringify(seedPayload) });
+        }
+        // Load all records
+        const body = await erpApiJson("/api/env-particle?limit=1000");
+        if (cancelled) return;
+        // Normalise API rows to same shape as ENV_PARTICLE_DATA (date field)
+        const rows = (body.data || []).map(r => ({ ...r, date: r.meas_date, N: r.N ?? 14 }));
+        setParticleData(rows.length > 0 ? rows : ENV_PARTICLE_DATA);
+      } catch (_) {
+        if (!cancelled) {
+          setSeedError(true);
+          setParticleData(ENV_PARTICLE_DATA);
+        }
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  // While loading, fall back to static data for instant render
+  const DATA = particleData ?? ENV_PARTICLE_DATA;
+
   // Monthly aggregation
   const mStats = {};
   MONTHS.forEach(m => { mStats[m] = { runs:0, passes:0, ch1sum:0, ch1n:0, ch1maxAll:0, ch3sum:0 }; });
-  ENV_PARTICLE_DATA.forEach(r => {
+  DATA.forEach(r => {
     const m = r.date.substring(0, 7);
     if (!mStats[m]) return;
     const ok = ENV_PARTICLE_OK(r);
@@ -6450,11 +6499,11 @@ function EnvParticlePanel() {
     if (r.ch1max > mStats[m].ch1maxAll) mStats[m].ch1maxAll = r.ch1max;
   });
 
-  const totalRuns   = ENV_PARTICLE_DATA.length;
-  const totalPasses = ENV_PARTICLE_DATA.filter(ENV_PARTICLE_OK).length;
+  const totalRuns   = DATA.length;
+  const totalPasses = DATA.filter(ENV_PARTICLE_OK).length;
   const passRate    = Math.round(totalPasses / totalRuns * 100);
-  const highEvents  = ENV_PARTICLE_DATA.filter(r => !ENV_PARTICLE_OK(r));
-  const latestRun   = ENV_PARTICLE_DATA[ENV_PARTICLE_DATA.length - 1];
+  const highEvents  = DATA.filter(r => !ENV_PARTICLE_OK(r));
+  const latestRun   = DATA[DATA.length - 1];
 
   const pctCol = v => v >= 95 ? "#22c55e" : v >= 85 ? "#f59e0b" : "#ef4444";
 
