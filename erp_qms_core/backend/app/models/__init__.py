@@ -21,6 +21,8 @@ from .training import TrainingEmployee, TrainingRecord
 from .equipment import EquipmentMaster, MaintenanceRecord
 from .supplier_eval import SupplierEvaluation
 from .env_particle import EnvParticleRecord
+from .nonconformance import NonConformance
+from .audit_plan import AuditPlan
 
 __all__ = [
     "Base",
@@ -54,4 +56,6 @@ __all__ = [
     "MaintenanceRecord",
     "SupplierEvaluation",
     "EnvParticleRecord",
+    "NonConformance",
+    "AuditPlan",
 ]

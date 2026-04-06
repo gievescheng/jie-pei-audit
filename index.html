@@ -2536,12 +2536,34 @@ function NonConformanceTab({ nonConformances: items, setNonConformances: setItem
     setBusy("save");
     setMessage("");
     try {
-      const payload = await apiJson("/api/nonconformances", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ record }),
-      });
-      setItems(payload.items || []);
+      const isExisting = items.some(x => String(x.id) === String(record.id));
+      if (isExisting) {
+        await erpApiJson("/api/nc/" + encodeURIComponent(record.id), {
+          method: "PATCH",
+          body: JSON.stringify({
+            nc_date: record.date, dept: record.dept, nc_type: record.type,
+            description: record.description, severity: record.severity,
+            root_cause: record.rootCause || "", corrective_action: record.correctiveAction || "",
+            responsible: record.responsible || "", due_date: record.dueDate || "",
+            status: record.status, close_date: record.closeDate || "",
+            effectiveness: record.effectiveness || "",
+          }),
+        });
+      } else {
+        await erpApiJson("/api/nc", {
+          method: "POST",
+          body: JSON.stringify({
+            nc_no: record.id, nc_date: record.date, dept: record.dept, nc_type: record.type,
+            description: record.description, severity: record.severity,
+            root_cause: record.rootCause || "", corrective_action: record.correctiveAction || "",
+            responsible: record.responsible || "", due_date: record.dueDate || "",
+            status: record.status, close_date: record.closeDate || "",
+            effectiveness: record.effectiveness || "",
+          }),
+        });
+      }
+      const listBody = await erpApiJson("/api/nc");
+      setItems(listBody.data || []);
       setMessage(doneMessage);
       return true;
     } catch (err) {
@@ -2569,8 +2591,9 @@ function NonConformanceTab({ nonConformances: items, setNonConformances: setItem
     setBusy("delete");
     setMessage("");
     try {
-      const payload = await apiJson("/api/nonconformances/" + encodeURIComponent(id), { method: "DELETE" });
-      setItems(payload.items || []);
+      await erpApiJson("/api/nc/" + encodeURIComponent(id), { method: "DELETE" });
+      const listBody = await erpApiJson("/api/nc");
+      setItems(listBody.data || []);
       setModal(null);
       setMessage("已刪除不符合報告。");
     } catch (err) {
@@ -2681,13 +2704,8 @@ function AuditPlanTab({ auditPlans, setAuditPlans }) {
       }
       setAttachmentBusy(true);
       try {
-        const payload = await apiJson("/api/audit-plans/" + encodeURIComponent(modal.id) + "/attachments");
-        if (!cancelled) setAttachments(payload.attachments || []);
-      } catch (err) {
-        if (!cancelled) {
-          setAttachments([]);
-          setMessage("附件讀取失敗：" + err.message);
-        }
+        // 附件功能尚未實作，直接清空
+        if (!cancelled) setAttachments([]);
       } finally {
         if (!cancelled) setAttachmentBusy(false);
       }
@@ -2700,12 +2718,26 @@ function AuditPlanTab({ auditPlans, setAuditPlans }) {
     setBusy("save");
     setMessage("");
     try {
-      const payload = await apiJson("/api/audit-plans", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records }),
-      });
-      setAuditPlans(payload.items || []);
+      for (const rec of records) {
+        const isExisting = auditPlans.some(x => String(x.id) === String(rec.id));
+        const body = {
+          year: rec.year, period: rec.period, scheduled_date: rec.scheduledDate,
+          dept: rec.dept, scope: rec.scope, auditor: rec.auditor, auditee: rec.auditee,
+          status: rec.status, actual_date: rec.actualDate || "",
+          findings: rec.findings || 0, nc_count: rec.ncCount || 0,
+        };
+        if (isExisting) {
+          await erpApiJson("/api/audit-plans/" + encodeURIComponent(rec.id), {
+            method: "PATCH", body: JSON.stringify(body),
+          });
+        } else {
+          await erpApiJson("/api/audit-plans", {
+            method: "POST", body: JSON.stringify({ plan_no: rec.id, ...body }),
+          });
+        }
+      }
+      const listBody = await erpApiJson("/api/audit-plans");
+      setAuditPlans(listBody.data || []);
       setMessage(doneMessage);
       return true;
     } catch (err) {
@@ -2725,8 +2757,9 @@ function AuditPlanTab({ auditPlans, setAuditPlans }) {
     if (!window.confirm("確定要刪除這筆稽核計畫嗎？")) return;
     setBusy("delete");
     try {
-      const payload = await apiJson("/api/audit-plans/" + encodeURIComponent(id), { method:"DELETE" });
-      setAuditPlans(payload.items || []);
+      await erpApiJson("/api/audit-plans/" + encodeURIComponent(id), { method:"DELETE" });
+      const listBody = await erpApiJson("/api/audit-plans");
+      setAuditPlans(listBody.data || []);
       setModal(null);
       setMessage("已刪除稽核計畫。");
     } catch (err) {
@@ -8388,19 +8421,62 @@ function App() {
     if (!authUser) return;
     let cancelled = false;
     async function loadOpsData() {
+      // ── NC ──
       try {
-        const [ncPayload, auditPayload, envPayload] = await Promise.all([
-          apiJson("/api/nonconformances"),
-          apiJson("/api/audit-plans"),
-          apiJson("/api/environment-records"),
-        ]);
-        if (cancelled) return;
-        setNonConformances(ncPayload.items || []);
-        setAuditPlans(auditPayload.items || []);
-        setEnvRecords(envPayload.items || []);
-      } catch (err) {
-        console.warn("Failed to load operation data", err);
-      }
+        const ncCount = await erpApiJson("/api/nc/count");
+        if ((ncCount.data?.total ?? 0) === 0) {
+          await erpApiJson("/api/nc/bulk-seed", {
+            method: "POST",
+            body: JSON.stringify({
+              records: initialNonConformances.map(n => ({
+                nc_no: n.id,
+                nc_date: n.date,
+                dept: n.dept,
+                nc_type: n.type,
+                description: n.description,
+                severity: n.severity,
+                root_cause: n.rootCause || "",
+                corrective_action: n.correctiveAction || "",
+                responsible: n.responsible || "",
+                due_date: n.dueDate || "",
+                status: n.status,
+                close_date: n.closeDate || "",
+                effectiveness: n.effectiveness || "",
+              })),
+            }),
+          });
+        }
+        const ncBody = await erpApiJson("/api/nc");
+        if (!cancelled) setNonConformances(ncBody.data || []);
+      } catch (_) { /* 靜默降級，保留 initialNonConformances */ }
+
+      // ── 稽核計畫 ──
+      try {
+        const apCount = await erpApiJson("/api/audit-plans/count");
+        if ((apCount.data?.total ?? 0) === 0) {
+          await erpApiJson("/api/audit-plans/bulk-seed", {
+            method: "POST",
+            body: JSON.stringify({
+              records: initialAuditPlans.map(a => ({
+                plan_no: a.id,
+                year: a.year,
+                period: a.period,
+                scheduled_date: a.scheduledDate,
+                dept: a.dept,
+                scope: a.scope,
+                auditor: a.auditor,
+                auditee: a.auditee,
+                status: a.status,
+                actual_date: a.actualDate || "",
+                findings: a.findings || 0,
+                nc_count: a.ncCount || 0,
+              })),
+            }),
+          });
+        }
+        const apBody = await erpApiJson("/api/audit-plans");
+        if (!cancelled) setAuditPlans(apBody.data || []);
+      } catch (_) { /* 靜默降級，保留 initialAuditPlans */ }
     }
     loadOpsData();
     return () => { cancelled = true; };
